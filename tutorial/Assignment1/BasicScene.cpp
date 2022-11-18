@@ -73,6 +73,10 @@ std::vector<MeshData> BasicScene::createDecimatedMesh(std::shared_ptr<Mesh> mesh
 
     reset();
 
+
+    /*
+        Need to collapse edges here
+    */
     return std::vector<MeshData>();
 }
 
