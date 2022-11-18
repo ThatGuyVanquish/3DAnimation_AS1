@@ -14,13 +14,13 @@
 #include <iostream>
 #include <set>
 #include "../engine/Mesh.h"
-#include "AutoMorphingModel.h"
+//#include "AutoMorphingModel.h"
 
 using namespace cg3d;
 
 enum keyPress { UP, DOWN, UNPRESSED };
 keyPress lastKey = UNPRESSED;
-int lastState = 6;
+int lastState = 0;
 
 std::vector<MeshData> BasicScene::createDecimatedMesh(std::string filename)
 {
@@ -68,11 +68,39 @@ std::vector<MeshData> BasicScene::createDecimatedMesh(std::string filename)
     };
 
     reset();
+
     std::vector<cg3d::MeshData> meshDataVector;
     meshDataVector.push_back(currentMesh->data[0]);
+    for (int i = 0; i < 6; i++)
+    {
+        std::cout << "this is a test\n";
+        const int max_iter = std::ceil(0.01 * Q.size());
+        for (int j = 0; j < max_iter; j++)
+        {
+            //std::cout << "iteration number " << j << std::endl;
+            //std::cout << "V: \n" << V << std::endl;
+            //std::cout << "F: \n" << F << std::endl;
+            //std::cout << "E: \n" << E << std::endl;
+            //std::cout << "EMAP: \n" << EMAP << std::endl;
+            //std::cout << "EF: \n" << EF << std::endl;
+            //std::cout << "EI: \n" << EI << std::endl;
+            ////std::cout << "Q: \n" << Q << std::endl;
+            //std::cout << "EQ: \n" << EQ << std::endl;
+            //std::cout << "C: \n" << C << std::endl;
+
+            if (!igl::collapse_edge(igl::shortest_edge_and_midpoint, V, F, E, EMAP, EF, EI, Q, EQ, C))
+            {
+                break;
+            }
+        }
+        std::cout << "this is a test\n";
+        cg3d::Mesh temp("new mesh", V, F, currentMesh->data[0].vertexNormals, currentMesh->data[0].textureCoords);
+        meshDataVector.push_back(temp.data[0]);
+    }
 
     /*auto snakeMesh{ ObjLoader::MeshFromObjFiles<std::string>("snakeMesh", "data/sphere.obj", "data/camel_b.obj", "data/armadillo.obj", "data/arm.obj", "data/monkey3.obj") };
     return snakeMesh->data;*/
+    std::cout << "Decimated mesh size is: " << meshDataVector.size() << std::endl;
     return meshDataVector;
 }
 
@@ -96,34 +124,32 @@ void BasicScene::Init(float fov, int width, int height, float near, float far)
     auto material{ std::make_shared<Material>("material", program)}; // empty material
     material->AddTexture(0, "textures/box0.bmp", 2);
 
-    //auto camelMesh{IglLoader::MeshFromFiles("cyl_igl","data/sphere.obj", "data/camel_b.obj", "data/armadillo.obj", "data/arm.obj", "data/cheburashka.off", "data/monkey3.obj") };
-    std::shared_ptr<cg3d::Mesh> camelMesh(new cg3d::Mesh(std::string("camelWithDecimations"), createDecimatedMesh("data/camel_b.obj")));
+    std::shared_ptr<cg3d::Mesh> camelMesh(new cg3d::Mesh(std::string("camelWithDecimations"), createDecimatedMesh("data/lion.off")));
     camel = Model::Create("camel", camelMesh, material);
 
     auto morphFunc = [](Model* model, cg3d::Visitor* visitor) {
-        //std::cout << "Current state is: " << lastState << std::endl; for debugging state
-        if (lastKey == UP && lastState < 6)
-        {
-            lastKey = UNPRESSED;
-            return ++lastState;
-        }
-            
-        if (lastKey == DOWN && lastState > 0)
+        //std::cout << "Current state is: " << lastState << std::endl; //for debugging state
+        if (lastKey == UP && lastState > 0)
         {
             lastKey = UNPRESSED;
             return --lastState;
+        }
+            
+        if (lastKey == DOWN && lastState < 6)
+        {
+            lastKey = UNPRESSED;
+            return ++lastState;
         }
 
         lastKey = UNPRESSED;
         return lastState;
     };
 
-    auto autoCamel = AutoMorphingModel::Create(*camel, morphFunc);
+    autoCamel = cg3d::AutoMorphingModel::Create(*camel, morphFunc);
     autoCamel->Translate({ 3,0,0 });
-    autoCamel->Scale(0.5f);
+    autoCamel->Scale(3.0f);
     autoCamel->showWireframe = true;
     root->AddChild(autoCamel);
-    
     camera->Translate(20, Axis::Z);
 }
 
@@ -132,7 +158,7 @@ void BasicScene::Update(const Program& program, const Eigen::Matrix4f& proj, con
     Scene::Update(program, proj, view, model);
     program.SetUniform4f("lightColor", 1.0f, 1.0f, 1.0f, 0.5f);
     program.SetUniform4f("Kai", 1.0f, 1.0f, 1.0f, 1.0f);
-    camel->Rotate(0.01f, Axis::Y);
+    autoCamel->Rotate(0.001f, Axis::Y);
 }
 
 void BasicScene::KeyCallback(Viewport* viewport, int x, int y, int key, int scancode, int action, int mods)

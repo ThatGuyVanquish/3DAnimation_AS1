@@ -2,6 +2,7 @@
 
 #include "Scene.h"
 
+#include "AutoMorphingModel.h"
 #include <utility>
 
 class BasicScene : public cg3d::Scene
@@ -16,4 +17,5 @@ public:
 private:
     std::shared_ptr<Movable> root;
     std::shared_ptr<cg3d::Model> camel;
+    std::shared_ptr<cg3d::AutoMorphingModel> autoCamel;
 };
