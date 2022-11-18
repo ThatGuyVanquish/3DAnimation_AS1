@@ -1,7 +1,7 @@
 #include "Renderer.h"
 #include "Display.h"
 
-#define SCENE BasicScene // the scene (class name) to display
+#define SCENE SceneWithCameras // the scene (class name) to display
 
 #define STRINGIFY(X) #X
 #define CLASS_NAME_TO_HEADER(X) STRINGIFY(X.h)

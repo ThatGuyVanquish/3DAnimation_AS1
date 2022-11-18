@@ -18,20 +18,16 @@
 
 using namespace cg3d;
 
-int lastKey = -1;
-int lastVer = 9;
+enum keyPress { UP, DOWN, UNPRESSED };
+keyPress lastKey = UNPRESSED;
+int lastState = 6;
 
-std::vector<MeshData> BasicScene::createDecimatedMesh(std::shared_ptr<Mesh> mesh)
+std::vector<MeshData> BasicScene::createDecimatedMesh(std::string filename)
 {
-    /*
-        TODO:
-        Create a function for decimation 
-    */
-
-    std::string filename("data/camel_b.obj");
-
+    auto currentMesh{ IglLoader::MeshFromFiles("cyl_igl", filename) };
     Eigen::MatrixXd V, OV;
     Eigen::MatrixXi F, OF;
+
     igl::read_triangle_mesh(filename, OV, OF);
 
     // Prepare array-based edge data structures and priority queue
@@ -72,12 +68,12 @@ std::vector<MeshData> BasicScene::createDecimatedMesh(std::shared_ptr<Mesh> mesh
     };
 
     reset();
+    std::vector<cg3d::MeshData> meshDataVector;
+    meshDataVector.push_back(currentMesh->data[0]);
 
-
-    /*
-        Need to collapse edges here
-    */
-    return std::vector<MeshData>();
+    /*auto snakeMesh{ ObjLoader::MeshFromObjFiles<std::string>("snakeMesh", "data/sphere.obj", "data/camel_b.obj", "data/armadillo.obj", "data/arm.obj", "data/monkey3.obj") };
+    return snakeMesh->data;*/
+    return meshDataVector;
 }
 
 void BasicScene::Init(float fov, int width, int height, float near, float far)
@@ -100,21 +96,31 @@ void BasicScene::Init(float fov, int width, int height, float near, float far)
     auto material{ std::make_shared<Material>("material", program)}; // empty material
     material->AddTexture(0, "textures/box0.bmp", 2);
 
-    auto camelMesh{IglLoader::MeshFromFiles("cyl_igl","data/camel_b.obj")};
-    std::shared_ptr<cg3d::Mesh> camelMesh(new cg3d::Mesh(std::string("camelWithDecimations"), createDecimatedMesh(IglLoader::MeshFromFiles("cyl_igl", "data/camel_b.obj"))));
+    //auto camelMesh{IglLoader::MeshFromFiles("cyl_igl","data/sphere.obj", "data/camel_b.obj", "data/armadillo.obj", "data/arm.obj", "data/cheburashka.off", "data/monkey3.obj") };
+    std::shared_ptr<cg3d::Mesh> camelMesh(new cg3d::Mesh(std::string("camelWithDecimations"), createDecimatedMesh("data/camel_b.obj")));
     camel = Model::Create("camel", camelMesh, material);
 
     auto morphFunc = [](Model* model, cg3d::Visitor* visitor) {
-        if (lastKey == 1 && lastVer < 9)
-            return ++lastVer;
-        if (lastKey == 0 && lastVer > 0)
-            return --lastVer;
-        return lastVer;
+        //std::cout << "Current state is: " << lastState << std::endl; for debugging state
+        if (lastKey == UP && lastState < 6)
+        {
+            lastKey = UNPRESSED;
+            return ++lastState;
+        }
+            
+        if (lastKey == DOWN && lastState > 0)
+        {
+            lastKey = UNPRESSED;
+            return --lastState;
+        }
+
+        lastKey = UNPRESSED;
+        return lastState;
     };
 
     auto autoCamel = AutoMorphingModel::Create(*camel, morphFunc);
     autoCamel->Translate({ 3,0,0 });
-    autoCamel->Scale(0.12f);
+    autoCamel->Scale(0.5f);
     autoCamel->showWireframe = true;
     root->AddChild(autoCamel);
     
@@ -138,50 +144,41 @@ void BasicScene::KeyCallback(Viewport* viewport, int x, int y, int key, int scan
         {
         case GLFW_KEY_ESCAPE:
             glfwSetWindowShouldClose(window, GLFW_TRUE);
-            lastKey = -1;
             break;
         case GLFW_KEY_UP:
             //camera->RotateInSystem(system, 0.1f, Axis::X);
-            lastKey = 1;
+            lastKey = UP;
             break;
         case GLFW_KEY_DOWN:
             //camera->RotateInSystem(system, -0.1f, Axis::X);
-            lastKey = 0;
+            lastKey = DOWN;
             break;
         case GLFW_KEY_LEFT:
             camera->RotateInSystem(system, 0.1f, Axis::Y);
-            lastKey = -1;
             break;
         case GLFW_KEY_RIGHT:
             camera->RotateInSystem(system, -0.1f, Axis::Y);
-            lastKey = -1;
             break;
         case GLFW_KEY_W:
             camera->TranslateInSystem(system, { 0, 0.05f, 0 });
-            lastKey = -1;
             break;
         case GLFW_KEY_S:
             camera->TranslateInSystem(system, { 0, -0.05f, 0 });
-            lastKey = -1;
             break;
         case GLFW_KEY_A:
             camera->TranslateInSystem(system, { -0.05f, 0, 0 });
-            lastKey = -1;
             break;
         case GLFW_KEY_D:
             camera->TranslateInSystem(system, { 0.05f, 0, 0 });
-            lastKey = -1;
             break;
         case GLFW_KEY_B:
             camera->TranslateInSystem(system, { 0, 0, 0.05f });
-            lastKey = -1;
             break;
         case GLFW_KEY_F:
             camera->TranslateInSystem(system, { 0, 0, -0.05f });
-            lastKey = -1;
             break;
         default:
-            lastKey = -1;
+            lastKey = UNPRESSED;
             break;
         }
     }

@@ -13,7 +13,7 @@
 #include "file_dialog_open.h"
 #include "GLFW/glfw3.h"
 
-
+int state_of_model = 0;
 using namespace cg3d;
 
 void SceneWithCameras::BuildImGui()
@@ -159,16 +159,21 @@ void SceneWithCameras::Init(float fov, int width, int height, float near, float 
     cube2->Translate({3, 0, -5});
     root->AddChildren({cube1, cube2});
 
-    auto snakeMesh{ObjLoader::MeshFromObjFiles<std::string>("snakeMesh", "data/snake1.obj", "data/snake2.obj")};
+    auto snakeMesh{ObjLoader::MeshFromObjFiles<std::string>("snakeMesh", "data/sphere.obj", "data/camel_b.obj", "data/armadillo.obj", "data/arm.obj", "data/face.obj", "data/monkey3.obj")};
     auto blank{std::make_shared<Material>("blank", program)};
     auto snake{Model::Create("snake", snakeMesh, blank)};
 
+
     auto morphFunc = [](Model* model, cg3d::Visitor* visitor) {
-        static float prevDistance = -1;
+        state_of_model++;
+        if (state_of_model == 60) state_of_model = 0;
+        return state_of_model / 10;
+
+        /*static float prevDistance = -1;
         float distance = (visitor->view * visitor->norm * model->aggregatedTransform).norm();
         if (prevDistance != distance)
             debug(model->name, " distance from camera: ", prevDistance = distance);
-        return distance > 3 ? 1 : 0;
+        return distance > 1 ? 3 : 0;*/
     };
     auto autoSnake = AutoMorphingModel::Create(*snake, morphFunc);
     autoSnake->showWireframe = true;

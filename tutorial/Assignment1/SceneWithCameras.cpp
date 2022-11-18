@@ -159,7 +159,7 @@ void SceneWithCameras::Init(float fov, int width, int height, float near, float 
     cube2->Translate({3, 0, -5});
     root->AddChildren({cube1, cube2});
 
-    auto snakeMesh{ObjLoader::MeshFromObjFiles<std::string>("snakeMesh", "data/snake1.obj", "data/snake2.obj")};
+    auto snakeMesh{ObjLoader::MeshFromObjFiles<std::string>("snakeMesh",/* "data/snake1.obj",*/ "data/camel_b.obj", "data/cube.off")};
     auto blank{std::make_shared<Material>("blank", program)};
     auto snake{Model::Create("snake", snakeMesh, blank)};
 
@@ -168,7 +168,7 @@ void SceneWithCameras::Init(float fov, int width, int height, float near, float 
         float distance = (visitor->view * visitor->norm * model->aggregatedTransform).norm();
         if (prevDistance != distance)
             debug(model->name, " distance from camera: ", prevDistance = distance);
-        return distance > 3 ? 1 : 0;
+        return distance > 5 ? 1 : 0;
     };
     auto autoSnake = AutoMorphingModel::Create(*snake, morphFunc);
     autoSnake->showWireframe = true;

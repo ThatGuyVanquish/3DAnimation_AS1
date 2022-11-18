@@ -113,7 +113,7 @@ void Display::WindowSizeCallback(GLFWwindow* window, int width, int height)
 
 void Display::LaunchRendering(bool loop) const
 {
-    const int num_extra_frames = 5;
+    const int num_extra_frames = 3;
     int frameCounter = 0;
     int windowWidth, windowHeight;
 
