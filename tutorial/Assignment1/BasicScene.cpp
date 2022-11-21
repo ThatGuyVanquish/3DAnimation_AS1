@@ -1,20 +1,4 @@
 #include "BasicScene.h"
-#include <utility>
-#include "ObjLoader.h"
-#include "IglMeshLoader.h"
-#include <igl/circulation.h>
-#include <igl/collapse_edge.h>
-#include <igl/edge_flaps.h>
-#include <igl/decimate.h>
-#include <igl/shortest_edge_and_midpoint.h>
-#include <igl/parallel_for.h>
-#include <igl/read_triangle_mesh.h>
-#include <igl/opengl/glfw/Viewer.h>
-#include <Eigen/Core>
-#include <iostream>
-#include <set>
-#include "../engine/Mesh.h"
-//#include "AutoMorphingModel.h"
 
 using namespace cg3d;
 
@@ -33,7 +17,7 @@ std::vector<MeshData> BasicScene::createDecimatedMesh(std::string filename)
     // Prepare array-based edge data structures and priority queue
     Eigen::VectorXi EMAP;
     Eigen::MatrixXi E, EF, EI;
-    igl::min_heap< std::tuple<double, int, int> > Q;
+    igl::min_heap< std::tuple<double, int, int>> Q;
     Eigen::VectorXi EQ;
     // If an edge were collapsed, we'd collapse it to these points:
     Eigen::MatrixXd C;
@@ -71,23 +55,12 @@ std::vector<MeshData> BasicScene::createDecimatedMesh(std::string filename)
 
     std::vector<cg3d::MeshData> meshDataVector;
     meshDataVector.push_back(currentMesh->data[0]);
+
     for (int i = 0; i < 6; i++)
     {
-        std::cout << "this is a test\n";
         const int max_iter = std::ceil(0.01 * Q.size());
         for (int j = 0; j < max_iter; j++)
         {
-            //std::cout << "iteration number " << j << std::endl;
-            //std::cout << "V: \n" << V << std::endl;
-            //std::cout << "F: \n" << F << std::endl;
-            //std::cout << "E: \n" << E << std::endl;
-            //std::cout << "EMAP: \n" << EMAP << std::endl;
-            //std::cout << "EF: \n" << EF << std::endl;
-            //std::cout << "EI: \n" << EI << std::endl;
-            ////std::cout << "Q: \n" << Q << std::endl;
-            //std::cout << "EQ: \n" << EQ << std::endl;
-            //std::cout << "C: \n" << C << std::endl;
-
             if (!igl::collapse_edge(igl::shortest_edge_and_midpoint, V, F, E, EMAP, EF, EI, Q, EQ, C))
             {
                 break;
@@ -97,9 +70,6 @@ std::vector<MeshData> BasicScene::createDecimatedMesh(std::string filename)
         cg3d::Mesh temp("new mesh", V, F, currentMesh->data[0].vertexNormals, currentMesh->data[0].textureCoords);
         meshDataVector.push_back(temp.data[0]);
     }
-
-    /*auto snakeMesh{ ObjLoader::MeshFromObjFiles<std::string>("snakeMesh", "data/sphere.obj", "data/camel_b.obj", "data/armadillo.obj", "data/arm.obj", "data/monkey3.obj") };
-    return snakeMesh->data;*/
     std::cout << "Decimated mesh size is: " << meshDataVector.size() << std::endl;
     return meshDataVector;
 }
@@ -124,11 +94,10 @@ void BasicScene::Init(float fov, int width, int height, float near, float far)
     auto material{ std::make_shared<Material>("material", program)}; // empty material
     material->AddTexture(0, "textures/box0.bmp", 2);
 
-    std::shared_ptr<cg3d::Mesh> camelMesh(new cg3d::Mesh(std::string("camelWithDecimations"), createDecimatedMesh("data/lion.off")));
+    std::shared_ptr<cg3d::Mesh> camelMesh(new cg3d::Mesh(std::string("camelWithDecimations"), createDecimatedMesh("data/bunny.off")));
     camel = Model::Create("camel", camelMesh, material);
 
     auto morphFunc = [](Model* model, cg3d::Visitor* visitor) {
-        //std::cout << "Current state is: " << lastState << std::endl; //for debugging state
         if (lastKey == UP && lastState > 0)
         {
             lastKey = UNPRESSED;
@@ -146,11 +115,11 @@ void BasicScene::Init(float fov, int width, int height, float near, float far)
     };
 
     autoCamel = cg3d::AutoMorphingModel::Create(*camel, morphFunc);
-    autoCamel->Translate({ 3,0,0 });
-    autoCamel->Scale(3.0f);
+    autoCamel->Translate({ 1,-3,0 });
+    autoCamel->Scale(30.0f);
     autoCamel->showWireframe = true;
     root->AddChild(autoCamel);
-    camera->Translate(20, Axis::Z);
+    camera->Translate(10, Axis::Z);
 }
 
 void BasicScene::Update(const Program& program, const Eigen::Matrix4f& proj, const Eigen::Matrix4f& view, const Eigen::Matrix4f& model)
@@ -172,11 +141,9 @@ void BasicScene::KeyCallback(Viewport* viewport, int x, int y, int key, int scan
             glfwSetWindowShouldClose(window, GLFW_TRUE);
             break;
         case GLFW_KEY_UP:
-            //camera->RotateInSystem(system, 0.1f, Axis::X);
             lastKey = UP;
             break;
         case GLFW_KEY_DOWN:
-            //camera->RotateInSystem(system, -0.1f, Axis::X);
             lastKey = DOWN;
             break;
         case GLFW_KEY_LEFT:
@@ -208,4 +175,45 @@ void BasicScene::KeyCallback(Viewport* viewport, int x, int y, int key, int scan
             break;
         }
     }
+}
+
+Eigen::Vector4d BasicScene::equation_plane(std::vector<int> triangle, Eigen::MatrixXd& V)
+{
+    auto x2MinusX1 = V.row(triangle[1]) - V.row(triangle[0]);
+    double a1 = x2MinusX1[0];
+    double b1 = x2MinusX1[1];
+    double c1 = x2MinusX1[2];
+    auto x3MinusX1 = V.row(triangle[2]) - V.row(triangle[0]);
+    double a2 = x3MinusX1[0];
+    double b2 = x3MinusX1[1];
+    double c2 = x3MinusX1[2];
+    double a = b1 * c2 - b2 * c1;
+    double b = a2 * c1 - a1 * c2;
+    double c = a1 * b2 - b1 * a2;
+    double d = (-a * V.row(triangle[0])[0] - b * V.row(triangle[0])[1] - c * V.row(triangle[0])[2]);
+    double normalizer = sqrt(pow(a, 2) + pow(b, 2) + pow(c, 2));
+    Eigen::Vector4d ret;
+    ret(0) = a / normalizer, ret(1) = b / normalizer, ret(2) = c / normalizer, ret(3) = d / normalizer;
+    return ret;
+}
+
+Eigen::Matrix4d BasicScene::calculateQ(Eigen::MatrixXd planeMatrix)
+{
+    /* each row of planeMatrix is a plane equation*/
+    Eigen::Matrix4d ret;
+    ret.Zero();
+    for (int i = 0; i < planeMatrix.rows(); i++)
+    {
+        ret = ret + planeMatrix.row(i).transpose() * planeMatrix.row(i);
+    }
+    return ret;
+}
+
+/*
+    some function that runs equation_plane in a loop for every face and adds the last vector to a matrix
+*/
+
+double BasicScene::calculateCost(Eigen::Matrix4d QMatrix, Eigen::Vector4d vertex)
+{
+    return vertex.transpose() * QMatrix * vertex;
 }

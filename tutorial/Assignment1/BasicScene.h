@@ -4,6 +4,22 @@
 
 #include "AutoMorphingModel.h"
 #include <utility>
+#include <utility>
+#include "ObjLoader.h"
+#include "IglMeshLoader.h"
+#include "igl_inline.h"
+#include <igl/circulation.h>
+#include <igl/collapse_edge.h>
+#include <igl/edge_flaps.h>
+#include <igl/decimate.h>
+#include <igl/shortest_edge_and_midpoint.h>
+#include <igl/parallel_for.h>
+#include <igl/read_triangle_mesh.h>
+#include <igl/opengl/glfw/Viewer.h>
+#include <Eigen/Core>
+#include <iostream>
+#include <set>
+#include "../engine/Mesh.h"
 
 class BasicScene : public cg3d::Scene
 {
@@ -18,4 +34,8 @@ private:
     std::shared_ptr<Movable> root;
     std::shared_ptr<cg3d::Model> camel;
     std::shared_ptr<cg3d::AutoMorphingModel> autoCamel;
+    Eigen::Vector4d equation_plane(std::vector<int> triangle, Eigen::MatrixXd& V);
+    Eigen::Matrix4d calculateQ(Eigen::MatrixXd planeMatrix);
+    double calculateCost(Eigen::Matrix4d QMatrix, Eigen::Vector4d vertex);
+    
 };
