@@ -49,6 +49,7 @@ std::shared_ptr<cg3d::Mesh> BasicScene::createDecimatedMesh(std::string filename
 
     for (int i = 0; i < decimations; i++)
     {
+        int collapsed_edges = 0;
         const int max_iter = std::ceil(0.01 * Q.size());
         for (int j = 0; j < max_iter; j++)
         {
@@ -56,8 +57,11 @@ std::shared_ptr<cg3d::Mesh> BasicScene::createDecimatedMesh(std::string filename
             {
                 break;
             }
+            collapsed_edges++;
         }
-        currentMesh->data.push_back({ V, F, currentMesh->data[0].vertexNormals, currentMesh->data[0].textureCoords });
+        if (collapsed_edges > 0) {
+            currentMesh->data.push_back({ V, F, currentMesh->data[0].vertexNormals, currentMesh->data[0].textureCoords });
+        }
     }
     return currentMesh;
 }
