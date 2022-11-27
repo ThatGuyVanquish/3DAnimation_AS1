@@ -21,15 +21,21 @@
 #include "../engine/Mesh.h"
 #include <Eigen/LU> 
 
+/*
 
+    Mesh Simplification object holds a simplified mesh object
+    with 
+
+*/
 class MeshSimplification
 {
 public:
-    MeshSimplification(std::string filename);
-    std::vector<cg3d::MeshData> createDecimatedMesh(std::string filename);
+    MeshSimplification(std::string filename, int _decimations);
+    std::shared_ptr<cg3d::Mesh> getMesh();
 
 private:
     std::shared_ptr<cg3d::Mesh> currentMesh;
+    int decimations;
     Eigen::MatrixXd V;
     Eigen::MatrixXi F;
     Eigen::MatrixXi E;
@@ -43,6 +49,7 @@ private:
     std::map<int, std::vector<int>> verticesToFaces;
 
     void Init();
+    void createDecimatedMesh();
     Eigen::Vector4d equation_plane(Eigen::Vector3i triangle, Eigen::MatrixXd& V);
     Eigen::Matrix4d calculateKp(Eigen::Vector4d planeVector);
     void calculateQs();

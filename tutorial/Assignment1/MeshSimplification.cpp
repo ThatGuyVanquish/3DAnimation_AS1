@@ -1,7 +1,18 @@
 #include "MeshSimplification.h"
 
-MeshSimplification::MeshSimplification(std::string filename):
-    currentMesh(cg3d::IglLoader::MeshFromFiles("cyl_igl", filename))
+MeshSimplification::MeshSimplification(std::string filename, int _decimations):
+    currentMesh(cg3d::IglLoader::MeshFromFiles("Current Mesh", filename)), decimations(_decimations)
+{
+    Init();
+    createDecimatedMesh();
+}
+
+std::shared_ptr<cg3d::Mesh> MeshSimplification::getMesh()
+{
+    return currentMesh;
+}
+
+void MeshSimplification::Init()
 {
     V = currentMesh->data[0].vertices, F = currentMesh->data[0].faces;
     igl::edge_flaps(F, E, EMAP, EF, EI);
@@ -9,15 +20,15 @@ MeshSimplification::MeshSimplification(std::string filename):
     Eigen::VectorXd costs(E.rows());
     Q = {};
     EQ = Eigen::VectorXi::Zero(E.rows());
-    {
+    { // Build costs heap
+        calculateQs();
         Eigen::VectorXd costs(E.rows());
         igl::parallel_for(E.rows(), [&](const int e)
             {
                 double cost = e;
                 Eigen::RowVectorXd p(1, 3);
-                igl::shortest_edge_and_midpoint(e, V, F, E, EMAP, EF, EI, cost, p);
-                // verticesToQ = calculateQs(F, V);
-                    //quadratic_error_simplification(e, V, F, E, EMAP, EF, EI, cost, p);
+                //igl::shortest_edge_and_midpoint(e, V, F, E, EMAP, EF, EI, cost, p);
+                quadratic_error_simplification(e, cost, p);
                 C.row(e) = p;
                 costs(e) = cost;
             }, 10000);
@@ -26,12 +37,6 @@ MeshSimplification::MeshSimplification(std::string filename):
             Q.emplace(costs(e), e);
         }
     }
-    Init();
-    calculateQs();
-}
-
-void MeshSimplification::Init()
-{
     for (int i = 0; i < F.rows(); i++)
     {
         Eigen::VectorXi currentRowInF = F.row(i);
@@ -163,70 +168,68 @@ bool MeshSimplification::collapse_edge()
     //double cost;
     Eigen::RowVectorXd p = C.row(e);
     //quadratic_error_simplification(e, cost, p);
-    V.conservativeResize(V.rows() + 1, V.cols());
+    
+    // new shit
+    /*V.conservativeResize(V.rows() + 1, V.cols());
     int newVertexIndex = V.rows() - 1;
-    V.row(newVertexIndex) = p;
+    V.row(newVertexIndex) = p;*/
+    V.row(v1) = p, V.row(v2) = p;
     
     // c. remove old vertices from V, F so we could call edge_flaps to rebuild E, EF, EI, EMAP
     F.row(EF(e, 0)) = Eigen::Vector3i(0, 0, 0);
     F.row(EF(e, 1)) = Eigen::Vector3i(0, 0, 0);
     std::vector<int> facesOfV1 = verticesToFaces[v1];
-    for (int face : facesOfV1)
+    // new
+    std::vector<int> facesForV2;
+    // idea - instead of adding a new vertex, we set the values of
+    // the faces of v1 and v2 to be the same and remove the faces we removed, 
+    // making them in theory the same vertex
+    for (int i = 0; i < facesOfV1.size(); i++)
     {
-        if (face == EF(e, 0) || face == EF(e, 1))
+        if (facesOfV1[i] == EF(e, 0) || facesOfV1[i] == EF(e, 1))
         {
-            continue;
+            facesOfV1.erase(facesOfV1.begin() + i); // concurrent modification?
+            i--;
         }
-        verticesToFaces[newVertexIndex].push_back(face);
+        /*verticesToFaces[newVertexIndex].push_back(face);
         for (int i = 0; i < 3; i++)
             if (F(face, i) == v1)
-                F(face, i) = newVertexIndex;
+                F(face, i) = newVertexIndex;*/
+        // new
+        facesForV2.push_back(facesOfV1[i]);
     }
     std::vector<int> facesOfV2 = verticesToFaces[v2];
-    for (int face : facesOfV2)
+    std::vector<int> facesForV1;
+    for (int i = 0; i < facesOfV2.size(); i++)
     {
-        if (face == EF(e, 0) || face == EF(e, 1))
+        if (facesOfV2[i] == EF(e, 0) || facesOfV2[i] == EF(e, 1))
         {
-            continue;
+            facesOfV2.erase(facesOfV2.begin() + i); // concurrent modification?
+            i--;
         }
-        verticesToFaces[newVertexIndex].push_back(face);
+        /*verticesToFaces[newVertexIndex].push_back(face);
         for (int i = 0; i < 3; i++)
             if (F(face, i) == v2)
-                F(face, i) = newVertexIndex;
+                F(face, i) = newVertexIndex;*/
+        facesForV1.push_back(facesOfV2[i]);
     }
+    for (int face : facesForV2)
+        facesOfV2.push_back(face);
+    for (int face : facesForV1)
+        facesOfV1.push_back(face);
 
-    verticesToFaces.erase(v1);
-    verticesToFaces.erase(v2);
+    //verticesToFaces.erase(v1);
+    //verticesToFaces.erase(v2);
     igl::edge_flaps(F, E, EMAP, EF, EI);
 
     return true;
 }
 
-std::vector<cg3d::MeshData> MeshSimplification::createDecimatedMesh(std::string filename)
+void MeshSimplification::createDecimatedMesh()
 {
-    //std::cout << "EMAP:\n*********************\n" << EMAP << "\n*********************\n" << std::endl;
-    //std::cout << "E:\n*********************\n" << E << "\n*********************\n" << std::endl;
-    ////std::cout << "EF:\n*********************\n" << EF << "\n*********************\n" << std::endl;
-    ////std::cout << "EI:\n*********************\n" << EI << "\n*********************\n" << std::endl;
-    //std::cout << "EI:\n*********************\n" << EQ << "\n*********************\n" << std::endl;
-    //std::cout << "V:" << V << std::endl;
-    //std::cout << "F:\n*********************\n" << F << "\n*********************\n" << std::endl;
-
-    ////std::cout << "normals before collapse\n" << currentMesh->data[0].vertexNormals << std::endl;
-    //auto facezero = F.row(0);
-    //std::cout << "face to calculate normal is:" << facezero << std::endl;
-    //std::cout << "First vertex is " << V.row(facezero(0, 0)) << std::endl;
-    //std::cout << "Second vertex is " << V.row(facezero(0, 1)) << std::endl;
-    //std::cout << "Third vertex is " << V.row(facezero(0, 2)) << std::endl;
-    //auto normalized = equation_plane(facezero, V);
-    //std::cout << "Our normalization is " << normalized << std::endl;
-    //std::cout << "other normalization is " << currentMesh->data[0].vertexNormals << std::endl;
-
-    //std::vector<cg3d::MeshData> meshDataVector;
-    //meshDataVector.push_back(currentMesh->data[0]);
-
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < decimations; i++)
     {
+        int collapsed_edges = 0;
         const int max_iter = std::ceil(0.1 * Q.size());
         for (int j = 0; j < max_iter; j++)
         {
@@ -234,15 +237,15 @@ std::vector<cg3d::MeshData> MeshSimplification::createDecimatedMesh(std::string 
             {
                 break;
             }
+            collapsed_edges++;
         }
-        //igl::per_vertex_normals(V, F, N);
-        //std::cout << "\nnormals after collapse number " << i << "\n" << N << std::endl;
-        cg3d::Mesh temp("new mesh", V, F, currentMesh->data[0].vertexNormals, currentMesh->data[0].textureCoords);
-        meshDataVector.push_back(temp.data[0]);
-
+        if (collapsed_edges > 0)
+        {
+            currentMesh->data.push_back(
+                { V, F, currentMesh->data[0].vertexNormals, currentMesh->data[0].textureCoords }
+            );
+        }
     }
-    std::cout << "Decimated mesh size is: " << meshDataVector.size() << std::endl;
-    return meshDataVector;
 }
 
 int main() {
