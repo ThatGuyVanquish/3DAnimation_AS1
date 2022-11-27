@@ -163,64 +163,77 @@ bool MeshSimplification::collapse_edge()
     }
     else e = std::get<1>(currentEdge);
     Q.pop();
-    // b. add the new vertex into V
-    int v1 = E(e, 0), v2 = E(e, 1);
-    //double cost;
-    Eigen::RowVectorXd p = C.row(e);
-    //quadratic_error_simplification(e, cost, p);
-    
-    // new shit
-    /*V.conservativeResize(V.rows() + 1, V.cols());
-    int newVertexIndex = V.rows() - 1;
-    V.row(newVertexIndex) = p;*/
-    V.row(v1) = p, V.row(v2) = p;
-    
-    // c. remove old vertices from V, F so we could call edge_flaps to rebuild E, EF, EI, EMAP
-    F.row(EF(e, 0)) = Eigen::Vector3i(0, 0, 0);
-    F.row(EF(e, 1)) = Eigen::Vector3i(0, 0, 0);
-    std::vector<int> facesOfV1 = verticesToFaces[v1];
-    // new
-    std::vector<int> facesForV2;
-    // idea - instead of adding a new vertex, we set the values of
-    // the faces of v1 and v2 to be the same and remove the faces we removed, 
-    // making them in theory the same vertex
-    for (int i = 0; i < facesOfV1.size(); i++)
-    {
-        if (facesOfV1[i] == EF(e, 0) || facesOfV1[i] == EF(e, 1))
-        {
-            facesOfV1.erase(facesOfV1.begin() + i); // concurrent modification?
-            i--;
-        }
-        /*verticesToFaces[newVertexIndex].push_back(face);
-        for (int i = 0; i < 3; i++)
-            if (F(face, i) == v1)
-                F(face, i) = newVertexIndex;*/
-        // new
-        facesForV2.push_back(facesOfV1[i]);
-    }
-    std::vector<int> facesOfV2 = verticesToFaces[v2];
-    std::vector<int> facesForV1;
-    for (int i = 0; i < facesOfV2.size(); i++)
-    {
-        if (facesOfV2[i] == EF(e, 0) || facesOfV2[i] == EF(e, 1))
-        {
-            facesOfV2.erase(facesOfV2.begin() + i); // concurrent modification?
-            i--;
-        }
-        /*verticesToFaces[newVertexIndex].push_back(face);
-        for (int i = 0; i < 3; i++)
-            if (F(face, i) == v2)
-                F(face, i) = newVertexIndex;*/
-        facesForV1.push_back(facesOfV2[i]);
-    }
-    for (int face : facesForV2)
-        facesOfV2.push_back(face);
-    for (int face : facesForV1)
-        facesOfV1.push_back(face);
+    const Eigen::RowVectorXd p = C.row(e);
+    const int test = e;
+    igl::collapse_edge(
+        test,
+        p,
+        V,
+        F,
+        E,
+        EMAP,
+        EF,
+        EI
+    );
 
-    //verticesToFaces.erase(v1);
-    //verticesToFaces.erase(v2);
-    igl::edge_flaps(F, E, EMAP, EF, EI);
+    //// b. add the new vertex into V
+    //int v1 = E(e, 0), v2 = E(e, 1);
+    ////double cost;
+    //Eigen::RowVectorXd p = C.row(e);
+    ////quadratic_error_simplification(e, cost, p);
+    //
+    //// new shit
+    ///*V.conservativeResize(V.rows() + 1, V.cols());
+    //int newVertexIndex = V.rows() - 1;
+    //V.row(newVertexIndex) = p;*/
+    //V.row(v1) = p, V.row(v2) = p;
+    //
+    //// c. remove old vertices from V, F so we could call edge_flaps to rebuild E, EF, EI, EMAP
+    //F.row(EF(e, 0)) = Eigen::Vector3i(0, 0, 0);
+    //F.row(EF(e, 1)) = Eigen::Vector3i(0, 0, 0);
+    //std::vector<int> facesOfV1 = verticesToFaces[v1];
+    //// new
+    //std::vector<int> facesForV2;
+    //// idea - instead of adding a new vertex, we set the values of
+    //// the faces of v1 and v2 to be the same and remove the faces we removed, 
+    //// making them in theory the same vertex
+    //for (int i = 0; i < facesOfV1.size(); i++)
+    //{
+    //    if (facesOfV1[i] == EF(e, 0) || facesOfV1[i] == EF(e, 1))
+    //    {
+    //        facesOfV1.erase(facesOfV1.begin() + i); // concurrent modification?
+    //        i--;
+    //    }
+    //    /*verticesToFaces[newVertexIndex].push_back(face);
+    //    for (int i = 0; i < 3; i++)
+    //        if (F(face, i) == v1)
+    //            F(face, i) = newVertexIndex;*/
+    //    // new
+    //    facesForV2.push_back(facesOfV1[i]);
+    //}
+    //std::vector<int> facesOfV2 = verticesToFaces[v2];
+    //std::vector<int> facesForV1;
+    //for (int i = 0; i < facesOfV2.size(); i++)
+    //{
+    //    if (facesOfV2[i] == EF(e, 0) || facesOfV2[i] == EF(e, 1))
+    //    {
+    //        facesOfV2.erase(facesOfV2.begin() + i); // concurrent modification?
+    //        i--;
+    //    }
+    //    /*verticesToFaces[newVertexIndex].push_back(face);
+    //    for (int i = 0; i < 3; i++)
+    //        if (F(face, i) == v2)
+    //            F(face, i) = newVertexIndex;*/
+    //    facesForV1.push_back(facesOfV2[i]);
+    //}
+    //for (int face : facesForV2)
+    //    facesOfV2.push_back(face);
+    //for (int face : facesForV1)
+    //    facesOfV1.push_back(face);
+
+    ////verticesToFaces.erase(v1);
+    ////verticesToFaces.erase(v2);
+    //igl::edge_flaps(F, E, EMAP, EF, EI);
 
     return true;
 }
