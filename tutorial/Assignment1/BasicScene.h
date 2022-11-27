@@ -25,17 +25,12 @@ class BasicScene : public cg3d::Scene
 {
 public:
     explicit BasicScene(std::string name, cg3d::Display* display) : Scene(std::move(name), display) {};
-    std::vector<cg3d::MeshData> createDecimatedMesh(std::string filename);
+    std::shared_ptr<cg3d::Mesh> createDecimatedMesh(std::string filename, int decimations);
     void Init(float fov, int width, int height, float near, float far);
     void Update(const cg3d::Program& program, const Eigen::Matrix4f& proj, const Eigen::Matrix4f& view, const Eigen::Matrix4f& model) override;
     void KeyCallback(cg3d::Viewport* viewport, int x, int y, int key, int scancode, int action, int mods) override;
 
 private:
     std::shared_ptr<Movable> root;
-    std::shared_ptr<cg3d::Model> camel;
-    std::shared_ptr<cg3d::AutoMorphingModel> autoCamel;
-    Eigen::Vector4d equation_plane(std::vector<int> triangle, Eigen::MatrixXd& V);
-    Eigen::Matrix4d calculateQ(Eigen::MatrixXd planeMatrix);
-    double calculateCost(Eigen::Matrix4d QMatrix, Eigen::Vector4d vertex);
-    
+    std::shared_ptr<cg3d::AutoMorphingModel> myAutoModel;
 };
