@@ -3,6 +3,8 @@
 MeshSimplification::MeshSimplification(std::string filename, int _decimations):
     currentMesh(cg3d::IglLoader::MeshFromFiles("Current Mesh", filename)), decimations(_decimations)
 {
+    V = currentMesh->data[0].vertices, F = currentMesh->data[0].faces;
+    igl::edge_flaps(F, E, EMAP, EF, EI);
     Init();
     createDecimatedMesh();
 }
@@ -14,12 +16,9 @@ std::shared_ptr<cg3d::Mesh> MeshSimplification::getMesh()
 
 void MeshSimplification::Init()
 {
-    V = currentMesh->data[0].vertices, F = currentMesh->data[0].faces;
-    igl::edge_flaps(F, E, EMAP, EF, EI);
     C.resize(E.rows(), V.cols());
     Eigen::VectorXd costs(E.rows());
     Q = {};
-    EQ = Eigen::VectorXi::Zero(E.rows());
     { // Build costs heap
         calculateQs();
         Eigen::VectorXd costs(E.rows());
@@ -164,9 +163,8 @@ bool MeshSimplification::collapse_edge()
     else e = std::get<1>(currentEdge);
     Q.pop();
     const Eigen::RowVectorXd p = C.row(e);
-    const int test = e;
     igl::collapse_edge(
-        test,
+        e,
         p,
         V,
         F,
@@ -175,6 +173,8 @@ bool MeshSimplification::collapse_edge()
         EF,
         EI
     );
+    std::cout << "edge " << e << ", cost = " << std::get<0>(currentEdge) <<
+        ", new v position (" << p(0) << ", " << p(1) << ", " << p(2) << ")" << std::endl;
 
     //// b. add the new vertex into V
     //int v1 = E(e, 0), v2 = E(e, 1);
@@ -244,6 +244,7 @@ void MeshSimplification::createDecimatedMesh()
     {
         int collapsed_edges = 0;
         const int max_iter = std::ceil(0.1 * Q.size());
+        const int heapResetInterval = max_iter / 10;
         for (int j = 0; j < max_iter; j++)
         {
             if (!collapse_edge())
@@ -251,6 +252,11 @@ void MeshSimplification::createDecimatedMesh()
                 break;
             }
             collapsed_edges++;
+            if (j % heapResetInterval == 0)
+            {
+                std::cout << "for testing purposes: " << j << std::endl;
+                Init(); // resets the cost heap and C matrix of new vertex positions
+            }
         }
         if (collapsed_edges > 0)
         {
@@ -261,29 +267,27 @@ void MeshSimplification::createDecimatedMesh()
     }
 }
 
-int main() {
-    auto currentMesh{ cg3d::IglLoader::MeshFromFiles("cyl_igl", "data/cube.off")};
-    Eigen::MatrixXd V, OV;
-    Eigen::MatrixXi F, OF;
-
-    igl::read_triangle_mesh("data/cube.off", OV, OF);
-    // Prepare array-based edge data structures and priority queue
-    Eigen::VectorXi EMAP;
-    Eigen::MatrixXi E, EF, EI;
-    igl::min_heap< std::tuple<double, int, int>> Q;
-    Eigen::VectorXi EQ;
-    // If an edge were collapsed, we'd collapse it to these points:
-    Eigen::MatrixXd C;
-    F = OV;
-    V = OF;
-    igl::edge_flaps(F, E, EMAP, EF, EI);
-
-    std::cout << "EMAP:\n*********************\n" << EMAP << "\n*********************\n" << std::endl;
-    std::cout << "E:\n*********************\n" << E << "\n*********************\n" << std::endl;
-    std::cout << "EF:\n*********************\n" << EF << "\n*********************\n" << std::endl;
-    std::cout << "EI:\n*********************\n" << EI << "\n*********************\n" << std::endl;
-    std::cout << "EI:\n*********************\n" << EQ << "\n*********************\n" << std::endl;
-    std::cout << "V:" << V << std::endl;
-    std::cout << "F:\n*********************\n" << F << "\n*********************\n" << std::endl;
-    return 0;
-}
+//int main() {
+//    auto currentMesh{ cg3d::IglLoader::MeshFromFiles("cyl_igl", "data/cube.off")};
+//    Eigen::MatrixXd V, OV;
+//    Eigen::MatrixXi F, OF;
+//
+//    igl::read_triangle_mesh("data/cube.off", OV, OF);
+//    // Prepare array-based edge data structures and priority queue
+//    Eigen::VectorXi EMAP;
+//    Eigen::MatrixXi E, EF, EI;
+//    igl::min_heap< std::tuple<double, int, int>> Q;
+//    // If an edge were collapsed, we'd collapse it to these points:
+//    Eigen::MatrixXd C;
+//    F = OV;
+//    V = OF;
+//    igl::edge_flaps(F, E, EMAP, EF, EI);
+//
+//    std::cout << "EMAP:\n*********************\n" << EMAP << "\n*********************\n" << std::endl;
+//    std::cout << "E:\n*********************\n" << E << "\n*********************\n" << std::endl;
+//    std::cout << "EF:\n*********************\n" << EF << "\n*********************\n" << std::endl;
+//    std::cout << "EI:\n*********************\n" << EI << "\n*********************\n" << std::endl;
+//    std::cout << "V:" << V << std::endl;
+//    std::cout << "F:\n*********************\n" << F << "\n*********************\n" << std::endl;
+//    return 0;
+//}

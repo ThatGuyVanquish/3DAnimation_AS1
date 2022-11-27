@@ -34,7 +34,7 @@ public:
 
 private:
     std::shared_ptr<Movable> root;
-    std::shared_ptr<cg3d::Model> camel;
-    std::shared_ptr<cg3d::AutoMorphingModel> autoCamel;
-    std::shared_ptr<MeshSimplification> simplificationObject;
+    std::shared_ptr<MeshSimplification> myMeshObj;
+    std::shared_ptr<cg3d::AutoMorphingModel> myAutoModel;
+    
 };

@@ -5,7 +5,6 @@ using namespace cg3d;
 
 void BasicScene::Init(float fov, int width, int height, float near, float far)
 {
-    //using namespace igl;
     camera = Camera::Create( "camera", fov, float(width) / height, near, far);
     
     AddChild(root = Movable::Create("root")); // a common (invisible) parent object for all the shapes
@@ -20,20 +19,26 @@ void BasicScene::Init(float fov, int width, int height, float near, float far)
     auto program = std::make_shared<Program>("shaders/basicShader");
     auto material{ std::make_shared<Material>("material", program)}; // empty material
     material->AddTexture(0, "textures/box0.bmp", 2);
-    std::shared_ptr<cg3d::Mesh> camelMesh(new cg3d::Mesh(std::string("camelWithDecimations"), simplificationObject->MeshSimplification::createDecimatedMesh("data/cube.off")));
-    camel = Model::Create("camel", camelMesh, material);
+    //std::string objFile = "data/bunny.off";
+    std::string objFile = "data/cube.off";
+    int decimations = 6;
+    myMeshObj = std::make_shared<MeshSimplification>(MeshSimplification(objFile, decimations));
 
     auto morphFunc = [](Model* model, cg3d::Visitor* visitor) {
         return model->meshIndex;
     };
 
-    autoCamel = cg3d::AutoMorphingModel::Create(*camel, morphFunc);
+    myAutoModel = cg3d::AutoMorphingModel::Create(
+        *cg3d::Model::Create("My Model", myMeshObj->getMesh(), material),
+        morphFunc
+    );
+    
     //autoCamel->Translate({ 1,-3,0 });
-    autoCamel->Translate({ 1,0,0 });
+    myAutoModel->Translate({ 1,0,0 });
     //autoCamel->Scale(30.0f);
-    autoCamel->Scale(1.0f);
-    autoCamel->showWireframe = true;
-    root->AddChild(autoCamel);
+    myAutoModel->Scale(1.0f);
+    myAutoModel->showWireframe = true;
+    root->AddChild(myAutoModel);
     camera->Translate(10, Axis::Z);
 }
 
@@ -42,7 +47,7 @@ void BasicScene::Update(const Program& program, const Eigen::Matrix4f& proj, con
     Scene::Update(program, proj, view, model);
     program.SetUniform4f("lightColor", 1.0f, 1.0f, 1.0f, 0.5f);
     program.SetUniform4f("Kai", 1.0f, 1.0f, 1.0f, 1.0f);
-    autoCamel->Rotate(0.001f, Axis::Y);
+    myAutoModel->Rotate(0.001f, Axis::Y);
 }
 
 void BasicScene::KeyCallback(Viewport* viewport, int x, int y, int key, int scancode, int action, int mods)
@@ -56,12 +61,12 @@ void BasicScene::KeyCallback(Viewport* viewport, int x, int y, int key, int scan
             glfwSetWindowShouldClose(window, GLFW_TRUE);
             break;
         case GLFW_KEY_UP:
-            if (autoCamel->meshIndex > 0)
-                autoCamel->meshIndex--;
+            if (myAutoModel->meshIndex > 0)
+                myAutoModel->meshIndex--;
             break;
         case GLFW_KEY_DOWN:
-            if (autoCamel->meshIndex < 10)
-                autoCamel->meshIndex++;
+            if (myAutoModel->meshIndex < myAutoModel->GetMesh(0)->data.size())
+                myAutoModel->meshIndex++;
             break;
         case GLFW_KEY_LEFT:
             camera->RotateInSystem(system, 0.1f, Axis::Y);

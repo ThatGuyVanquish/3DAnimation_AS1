@@ -39,11 +39,10 @@ private:
     Eigen::MatrixXd V;
     Eigen::MatrixXi F;
     Eigen::MatrixXi E;
-    Eigen::MatrixXi EMAP;
+    Eigen::VectorXi EMAP;
     Eigen::MatrixXi EF;
     Eigen::MatrixXi EI;
     igl::min_heap<std::tuple<double, int>> Q;
-    Eigen::VectorXi EQ;
     Eigen::MatrixXd C;
     std::vector<Eigen::Matrix4d> verticesToQ;
     std::map<int, std::vector<int>> verticesToFaces;
