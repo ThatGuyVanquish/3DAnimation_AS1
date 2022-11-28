@@ -84,23 +84,35 @@ double MeshSimplification::calculateCost(Eigen::Matrix4d QMatrix, Eigen::Vector3
 void MeshSimplification::calculateQs()
 {
     std::vector <Eigen::Matrix4d> QforVertex(V.rows());
-    for (Eigen::Matrix4d currentMatrix : QforVertex) // set every matrix to the zero matrix
-        currentMatrix = Eigen::Matrix4d::Zero();
+    std::cout << "Before" << std::endl;
+    for (int i = 0; i < QforVertex.size(); i++) // set every matrix to the zero matrix
+    {
+        QforVertex.at(i) = Eigen::Matrix4d::Zero();
+    }
 
     for (int i = 0; i < F.rows(); i++)
     {
         Eigen::VectorXi currentRowInF = F.row(i);
         auto currentPlaneVector = equation_plane(currentRowInF, V);
-        std::cout << "Plane vector is " << currentPlaneVector << std::endl;
+        //std::cout << "Plane vector is " << currentPlaneVector << std::endl;
         auto KpForPlaneI = calculateKp(currentPlaneVector);
-        std::cout << "Kp is " << KpForPlaneI << std::endl;
+        //std::cout << "Kp is " << KpForPlaneI << std::endl;
         for (int j = 0; j < 3; j++)
         {
             int currentVertex = currentRowInF[j];
+            std::cout << "Before sum\n" << QforVertex[currentVertex] <<
+                "\nKp before sum\n" << KpForPlaneI << std::endl;
             QforVertex[currentVertex] += KpForPlaneI;
+            std::cout << "After sum\n" << QforVertex[currentVertex] <<
+                "\nKp after sum\n" << KpForPlaneI << std::endl;
         }
     }
     verticesToQ = QforVertex;
+    for (int i = 0; i < QforVertex.size(); i++)
+    {
+        std::cout << "In VerticesToQ:\n" << verticesToQ.at(i) <<
+            "\n\nIn QforVertex:\n" << QforVertex.at(i) << "\n\n" << std::endl;
+    }
 }
 
 Eigen::Vector4d MeshSimplification::FourDVertexFrom3D(Eigen::Vector3d vertex)
