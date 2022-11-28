@@ -8,7 +8,7 @@ MeshSimplification::MeshSimplification(std::string filename, int _decimations) :
     V = currentMesh->data[0].vertices, F = currentMesh->data[0].faces;
     igl::edge_flaps(F, E, EMAP, EF, EI);
     Init();
-    //createDecimatedMesh();
+    createDecimatedMesh();
 }
 
 std::shared_ptr<cg3d::Mesh> MeshSimplification::getMesh()
@@ -18,7 +18,7 @@ std::shared_ptr<cg3d::Mesh> MeshSimplification::getMesh()
 
 void MeshSimplification::Init()
 {
-    C.resize(E.rows(), 3);
+    C.resize(E.rows(), V.cols());
     Eigen::VectorXd costs(E.rows());
     Q = {};
     EQ = Eigen::VectorXi::Zero(E.rows());
@@ -26,7 +26,7 @@ void MeshSimplification::Init()
     calculateQs();
     igl::parallel_for(E.rows(), [&](const int e)
         {
-            //Eigen::VectorXd costs(E.rows());
+            Eigen::VectorXd costs(E.rows());
             double cost = e;
             Eigen::RowVectorXd p(1, 3);
             quadratic_error_simplification(e, cost, p);
@@ -137,7 +137,8 @@ IGL_INLINE void MeshSimplification::quadratic_error_simplification(
     v0001[0] = 0, v0001[1] = 0, v0001[2] = 0, v0001[3] = 1;
     if (!invertible)
     {
-        Eigen::Vector4d v1 = FourDVertexFrom3D(V.row(vertex1)), v2 = FourDVertexFrom3D(V.row(vertex2)), v3 = FourDVertexFrom3D((v1 + v2) / 2);
+        Eigen::Vector4d v1 = FourDVertexFrom3D(V.row(vertex1)), v2 = FourDVertexFrom3D(V.row(vertex2));
+        Eigen::Vector4d v3 = (v1 + v2) / 2;
         double costV1 = v1.transpose() * Qtag * v1, costV2 = v2.transpose() * Qtag * v2, costV3 = v3.transpose() * Qtag * v3;
         vtag = costV1 <= costV2 ?
             (costV1 <= costV3 ? v1 : v3) :
@@ -147,7 +148,7 @@ IGL_INLINE void MeshSimplification::quadratic_error_simplification(
     {
         vtag = derivedQtagInverse * v0001;
     }
-    p = vtag;
+    p[0] = vtag[0], p[1] = vtag[1], p[2] = vtag[2];
     cost = vtag.transpose() * Qtag * vtag;
 }
 

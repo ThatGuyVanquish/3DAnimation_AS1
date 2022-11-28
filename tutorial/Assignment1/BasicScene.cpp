@@ -27,17 +27,17 @@ void BasicScene::Init(float fov, int width, int height, float near, float far)
         return model->meshIndex;
     };
 
-    //myAutoModel = cg3d::AutoMorphingModel::Create(
-    //    *cg3d::Model::Create("My Model", myMeshObj->getMesh(), material),
-    //    morphFunc
-    //);
+    myAutoModel = cg3d::AutoMorphingModel::Create(
+        *cg3d::Model::Create("My Model", myMeshObj->getMesh(), material),
+        morphFunc
+    );
     
     //autoCamel->Translate({ 1,-3,0 });
-    //myAutoModel->Translate({ 1,0,0 });
+    myAutoModel->Translate({ 1,0,0 });
     //autoCamel->Scale(30.0f);
-    //myAutoModel->Scale(1.0f);
-    //myAutoModel->showWireframe = true;
-    //root->AddChild(myAutoModel);
+    myAutoModel->Scale(1.0f);
+    myAutoModel->showWireframe = true;
+    root->AddChild(myAutoModel);
     camera->Translate(10, Axis::Z);
 }
 
@@ -46,7 +46,7 @@ void BasicScene::Update(const Program& program, const Eigen::Matrix4f& proj, con
     Scene::Update(program, proj, view, model);
     program.SetUniform4f("lightColor", 1.0f, 1.0f, 1.0f, 0.5f);
     program.SetUniform4f("Kai", 1.0f, 1.0f, 1.0f, 1.0f);
-    //myAutoModel->Rotate(0.001f, Axis::Y);
+    myAutoModel->Rotate(0.001f, Axis::Y);
 }
 
 void BasicScene::KeyCallback(Viewport* viewport, int x, int y, int key, int scancode, int action, int mods)
