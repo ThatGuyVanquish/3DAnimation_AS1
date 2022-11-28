@@ -8,7 +8,7 @@ MeshSimplification::MeshSimplification(std::string filename, int _decimations) :
     V = currentMesh->data[0].vertices, F = currentMesh->data[0].faces;
     igl::edge_flaps(F, E, EMAP, EF, EI);
     Init();
-    createDecimatedMesh();
+    //createDecimatedMesh();
 }
 
 std::shared_ptr<cg3d::Mesh> MeshSimplification::getMesh()
@@ -18,7 +18,7 @@ std::shared_ptr<cg3d::Mesh> MeshSimplification::getMesh()
 
 void MeshSimplification::Init()
 {
-    C.resize(E.rows(), V.cols());
+    C.resize(E.rows(), 3);
     Eigen::VectorXd costs(E.rows());
     Q = {};
     EQ = Eigen::VectorXi::Zero(E.rows());
@@ -26,13 +26,13 @@ void MeshSimplification::Init()
     calculateQs();
     igl::parallel_for(E.rows(), [&](const int e)
         {
+            //Eigen::VectorXd costs(E.rows());
             double cost = e;
             Eigen::RowVectorXd p(1, 3);
-            //igl::shortest_edge_and_midpoint(e, V, F, E, EMAP, EF, EI, cost, p);
             quadratic_error_simplification(e, cost, p);
             C.row(e) = p;
             costs(e) = cost;
-        }, 10000);
+        }, 1);
 
     for (int e = 0; e < E.rows(); e++)
     {
@@ -105,6 +105,13 @@ void MeshSimplification::calculateQs()
     verticesToQ = QforVertex;
 }
 
+Eigen::Vector4d MeshSimplification::FourDVertexFrom3D(Eigen::Vector3d vertex)
+{
+    Eigen::Vector4d newVertex;
+    newVertex[0] = vertex[0], newVertex[1] = vertex[1], newVertex[2] = vertex[2], newVertex[3] = 1;
+    return newVertex;
+}
+
 Eigen::Matrix4d MeshSimplification::calculateQDerive(Eigen::Matrix4d currentQ)
 {
     auto lastRow = currentQ.row(3);
@@ -130,7 +137,7 @@ IGL_INLINE void MeshSimplification::quadratic_error_simplification(
     v0001[0] = 0, v0001[1] = 0, v0001[2] = 0, v0001[3] = 1;
     if (!invertible)
     {
-        Eigen::Vector4d v1 = V.row(vertex1), v2 = V.row(vertex2), v3 = (v1 + v2) / 2;
+        Eigen::Vector4d v1 = FourDVertexFrom3D(V.row(vertex1)), v2 = FourDVertexFrom3D(V.row(vertex2)), v3 = FourDVertexFrom3D((v1 + v2) / 2);
         double costV1 = v1.transpose() * Qtag * v1, costV2 = v2.transpose() * Qtag * v2, costV3 = v3.transpose() * Qtag * v3;
         vtag = costV1 <= costV2 ?
             (costV1 <= costV3 ? v1 : v3) :
@@ -261,7 +268,7 @@ void MeshSimplification::createDecimatedMesh()
     for (int i = 0; i < decimations; i++)
     {
         int collapsed_edges = 0;
-        const int max_iter = std::ceil(0.1 * Q.size());
+        const int max_iter = (int)(std::ceil(0.1 * Q.size()));
         const int heapResetInterval = max_iter / 10;
         for (int j = 0; j < max_iter; j++)
         {

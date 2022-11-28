@@ -48,6 +48,7 @@ private:
     void calculateQs();
     double calculateCost(Eigen::Matrix4d QMatrix, Eigen::Vector3d vertex);
     Eigen::Matrix4d calculateQDerive(Eigen::Matrix4d currentQ);
+    Eigen::Vector4d FourDVertexFrom3D(Eigen::Vector3d vertex);
     void quadratic_error_simplification(const int e, double& cost, Eigen::RowVectorXd& p);
     bool collapse_edge();
 };
