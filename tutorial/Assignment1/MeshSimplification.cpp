@@ -24,7 +24,16 @@ void MeshSimplification::Init()
     EQ = Eigen::VectorXi::Zero(E.rows());
     // Build costs heap
     calculateQs();
-    igl::parallel_for(E.rows(), [&](const int e)
+    for (int e = 0; e < E.rows(); e++)
+    {
+        Eigen::VectorXd costs(E.rows());
+        double cost = e;
+        Eigen::RowVectorXd p(1, 3);
+        quadratic_error_simplification(e, cost, p);
+        C.row(e) = p;
+        costs(e) = cost;
+    }
+    /*igl::parallel_for(E.rows(), [&](const int e)
         {
             Eigen::VectorXd costs(E.rows());
             double cost = e;
@@ -32,24 +41,12 @@ void MeshSimplification::Init()
             quadratic_error_simplification(e, cost, p);
             C.row(e) = p;
             costs(e) = cost;
-        }, 1);
+        }, 1);*/
 
     for (int e = 0; e < E.rows(); e++)
     {
         Q.emplace(costs(e), e, 0);
     }
-    
-    //for (int i = 0; i < F.rows(); i++)
-    //{
-    //    Eigen::VectorXi currentRowInF = F.row(i);
-    //    // prepare vertex to face map
-    //    verticesToFaces.clear();
-    //    for (int j = 0; j < currentRowInF.cols(); j++)
-    //    {
-    //        int vertexId = currentRowInF(j);
-    //        verticesToFaces[vertexId].push_back(i);
-    //    }
-    //}
 }
 
 Eigen::Vector4d MeshSimplification::equation_plane(Eigen::Vector3i triangle, Eigen::MatrixXd& V)
@@ -126,7 +123,11 @@ IGL_INLINE void MeshSimplification::quadratic_error_simplification(
 {
     // Calculate p
     int vertex1 = E(e, 0), vertex2 = E(e, 1);
+    std::cout << "two vertices are:\n v1 = " << V.row(vertex1) <<
+        "\nv2 = " << V.row(vertex2) << std::endl;
     Eigen::Matrix4d Q1 = verticesToQ[vertex1], Q2 = verticesToQ[vertex2], Qtag = Q1 + Q2;
+    std::cout << "Qs are:\n Q1 =\n" << Q1 << "\nQ2 =\n" << Q2 << "\nQtag =\n" << Qtag <<
+        "\n" << std::endl;
     Eigen::Matrix4d derivedQtag = calculateQDerive(Qtag);
     Eigen::Matrix4d derivedQtagInverse;
     bool invertible = false;
@@ -272,7 +273,7 @@ void MeshSimplification::createDecimatedMesh()
     for (int i = 0; i < decimations; i++)
     {
         int collapsed_edges = 0;
-        const int max_iter = (int)(std::ceil(0.1 * Q.size()));
+        const int max_iter = (std::ceil(0.1 * Q.size()));
         const int heapResetInterval = (max_iter / 10) > 0 ? max_iter / 10 : 1;
         std::cout << "for testing purposes: maxIter" << max_iter << std::endl;
         for (int j = 0; j < max_iter; j++)
