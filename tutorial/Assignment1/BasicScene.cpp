@@ -23,7 +23,7 @@ void BasicScene::Init(float fov, int width, int height, float near, float far)
     std::string objFile = "data/cube.off";
     int decimations = 6;
     myMeshObj = std::make_shared<MeshSimplification>(MeshSimplification(objFile, decimations));
-
+    std::cout << "TEST HERE" << std::endl;
     auto morphFunc = [](Model* model, cg3d::Visitor* visitor) {
         return model->meshIndex;
     };

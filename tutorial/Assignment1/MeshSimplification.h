@@ -1,26 +1,18 @@
 #pragma once
 
-#include "Scene.h"
-
-#include "AutoMorphingModel.h"
 #include <utility>
-#include "ObjLoader.h"
 #include "IglMeshLoader.h"
 #include "igl_inline.h"
 #include <igl/circulation.h>
 #include <igl/collapse_edge.h>
 #include <igl/edge_flaps.h>
-#include <igl/decimate.h>
-#include <igl/shortest_edge_and_midpoint.h>
 #include <igl/parallel_for.h>
 #include <igl/read_triangle_mesh.h>
-#include <igl/opengl/glfw/Viewer.h>
 #include <Eigen/Core>
 #include <iostream>
-#include <set>
 #include "../engine/Mesh.h"
 #include <Eigen/LU> 
-
+#include <map>
 /*
 
     Mesh Simplification object holds a simplified mesh object
