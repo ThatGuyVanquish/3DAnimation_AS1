@@ -85,7 +85,7 @@ void MeshSimplification::calculateQs()
 {
     std::vector <Eigen::Matrix4d> QforVertex(V.rows());
     std::cout << "Before" << std::endl;
-    for (int i = 0; i < QforVertex.size(); i++) // set every matrix to the zero matrix
+    for (int i = 0; i < QforVertex.size(); i++)
     {
         QforVertex.at(i) = Eigen::Matrix4d::Zero();
     }
@@ -94,9 +94,9 @@ void MeshSimplification::calculateQs()
     {
         Eigen::VectorXi currentRowInF = F.row(i);
         auto currentPlaneVector = equation_plane(currentRowInF, V);
-        //std::cout << "Plane vector is " << currentPlaneVector << std::endl;
+        std::cout << "Plane vector is " << currentPlaneVector << std::endl;
         auto KpForPlaneI = calculateKp(currentPlaneVector);
-        //std::cout << "Kp is " << KpForPlaneI << std::endl;
+        std::cout << "Kp is " << KpForPlaneI << std::endl;
         for (int j = 0; j < 3; j++)
         {
             int currentVertex = currentRowInF[j];
@@ -136,11 +136,11 @@ IGL_INLINE void MeshSimplification::quadratic_error_simplification(
 {
     // Calculate p
     int vertex1 = E(e, 0), vertex2 = E(e, 1);
-    //std::cout << "two vertices are:\n v1 = " << V.row(vertex1) <<
-    //    "\nv2 = " << V.row(vertex2) << std::endl;
+    std::cout << "two vertices are:\n v1 = " << V.row(vertex1) <<
+        "\nv2 = " << V.row(vertex2) << std::endl;
     Eigen::Matrix4d Q1 = verticesToQ[vertex1], Q2 = verticesToQ[vertex2], Qtag = Q1 + Q2;
-    //std::cout << "Qs are:\n Q1 =\n" << Q1 << "\nQ2 =\n" << Q2 << "\nQtag =\n" << Qtag <<
-    //    "\n" << std::endl;
+    std::cout << "Qs are:\n Q1 =\n" << Q1 << "\nQ2 =\n" << Q2 << "\nQtag =\n" << Qtag <<
+       "\n" << std::endl;
     Eigen::Matrix4d derivedQtag = calculateQDerive(Qtag);
     Eigen::Matrix4d derivedQtagInverse;
     bool invertible = false;
