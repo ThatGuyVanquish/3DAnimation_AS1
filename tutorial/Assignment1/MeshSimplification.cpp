@@ -90,6 +90,9 @@ Eigen::Vector4d MeshSimplification::equation_plane(Eigen::Vector3i triangle, Eig
 
 Eigen::Matrix4d MeshSimplification::calculateKp(Eigen::Vector4d planeVector)
 {
+    auto test = planeVector* planeVector.transpose();
+    std::cout << test << std::endl;
+    std::cout << "\n\n\n\n";
     return planeVector * planeVector.transpose();
 }
 
@@ -111,12 +114,9 @@ void MeshSimplification::calculateQs()
     for (int i = 0; i < F.rows(); i++)
     {
         Eigen::VectorXi currentRowInF = F.row(i);
-        std::cout << "Blyat" << std::endl;
         Eigen::Vector3d test = blyat.row(i);
-        std::cout << "Blyat2" << std::endl;
         Eigen::Vector4d test2 = FourDVertexFrom3D(test);
-        std::cout << "Shons mom is \n" << test2 << std::endl;
-        //auto currentPlaneVector = equation_plane(currentRowInF, V);
+        auto currentPlaneVector = equation_plane(currentRowInF, V);
         auto KpForPlaneI = calculateKp(test2);
         for (int j = 0; j < 3; j++)
         {
