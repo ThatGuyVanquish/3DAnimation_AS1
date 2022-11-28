@@ -19,7 +19,7 @@ void BasicScene::Init(float fov, int width, int height, float near, float far)
     auto material{ std::make_shared<Material>("material", program)}; // empty material
     material->AddTexture(0, "textures/box0.bmp", 2);
     //std::string objFile = "data/bunny.off";
-    std::string objFile = "data/cube.off";
+    std::string objFile = "data/sphere.obj";
     int decimations = 6;
     myMeshObj = std::make_shared<MeshSimplification>(MeshSimplification(objFile, decimations));
     std::cout << "TEST HERE" << std::endl;
@@ -35,7 +35,7 @@ void BasicScene::Init(float fov, int width, int height, float near, float far)
     //autoCamel->Translate({ 1,-3,0 });
     myAutoModel->Translate({ 1,-3,0 });
     //autoCamel->Scale(30.0f);
-    myAutoModel->Scale(30.0f);
+    myAutoModel->Scale(4.0f);
     myAutoModel->showWireframe = true;
     root->AddChild(myAutoModel);
     camera->Translate(10, Axis::Z);

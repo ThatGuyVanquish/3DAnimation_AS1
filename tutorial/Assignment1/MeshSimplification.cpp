@@ -3,7 +3,9 @@
 MeshSimplification::MeshSimplification(std::string filename, int _decimations) :
     currentMesh(cg3d::IglLoader::MeshFromFiles("Current Mesh", filename)),
     decimations(_decimations),
-    collapseCounter(0)
+    collapseCounter(0),
+    verticesToUpdate(),
+    QResetInterval(0)
 {
     V = currentMesh->data[0].vertices, F = currentMesh->data[0].faces;
     igl::edge_flaps(F, E, EMAP, EF, EI);
@@ -47,6 +49,19 @@ void MeshSimplification::Init()
     {
         Q.emplace(costs(e), e, 0);
     }
+
+    for (int i = 0; i < F.rows(); i++)
+    {
+        Eigen::VectorXi currentRowInF = F.row(i);
+        // prepare vertex to face map
+        verticesToFaces.clear();
+        for (int j = 0; j < currentRowInF.cols(); j++)
+        {
+            int vertexId = currentRowInF(j);
+            verticesToFaces[vertexId].insert(i);
+        }
+    }
+
 }
 
 Eigen::Vector4d MeshSimplification::equation_plane(Eigen::Vector3i triangle, Eigen::MatrixXd& V)
@@ -84,7 +99,6 @@ double MeshSimplification::calculateCost(Eigen::Matrix4d QMatrix, Eigen::Vector3
 void MeshSimplification::calculateQs()
 {
     std::vector <Eigen::Matrix4d> QforVertex(V.rows());
-    std::cout << "Before" << std::endl;
     for (int i = 0; i < QforVertex.size(); i++)
     {
         QforVertex.at(i) = Eigen::Matrix4d::Zero();
@@ -94,25 +108,14 @@ void MeshSimplification::calculateQs()
     {
         Eigen::VectorXi currentRowInF = F.row(i);
         auto currentPlaneVector = equation_plane(currentRowInF, V);
-        std::cout << "Plane vector is " << currentPlaneVector << std::endl;
         auto KpForPlaneI = calculateKp(currentPlaneVector);
-        std::cout << "Kp is " << KpForPlaneI << std::endl;
         for (int j = 0; j < 3; j++)
         {
             int currentVertex = currentRowInF[j];
-            std::cout << "Before sum\n" << QforVertex[currentVertex] <<
-                "\nKp before sum\n" << KpForPlaneI << std::endl;
             QforVertex[currentVertex] += KpForPlaneI;
-            std::cout << "After sum\n" << QforVertex[currentVertex] <<
-                "\nKp after sum\n" << KpForPlaneI << std::endl;
         }
     }
     verticesToQ = QforVertex;
-    for (int i = 0; i < QforVertex.size(); i++)
-    {
-        std::cout << "In VerticesToQ:\n" << verticesToQ.at(i) <<
-            "\n\nIn QforVertex:\n" << QforVertex.at(i) << "\n\n" << std::endl;
-    }
 }
 
 Eigen::Vector4d MeshSimplification::FourDVertexFrom3D(Eigen::Vector3d vertex)
@@ -136,11 +139,7 @@ IGL_INLINE void MeshSimplification::quadratic_error_simplification(
 {
     // Calculate p
     int vertex1 = E(e, 0), vertex2 = E(e, 1);
-    std::cout << "two vertices are:\n v1 = " << V.row(vertex1) <<
-        "\nv2 = " << V.row(vertex2) << std::endl;
     Eigen::Matrix4d Q1 = verticesToQ[vertex1], Q2 = verticesToQ[vertex2], Qtag = Q1 + Q2;
-    std::cout << "Qs are:\n Q1 =\n" << Q1 << "\nQ2 =\n" << Q2 << "\nQtag =\n" << Qtag <<
-       "\n" << std::endl;
     Eigen::Matrix4d derivedQtag = calculateQDerive(Qtag);
     Eigen::Matrix4d derivedQtagInverse;
     bool invertible = false;
@@ -164,6 +163,50 @@ IGL_INLINE void MeshSimplification::quadratic_error_simplification(
     }
     p[0] = vtag[0], p[1] = vtag[1], p[2] = vtag[2];
     cost = vtag.transpose() * Qtag * vtag;
+}
+
+void MeshSimplification::calculateQ(int v)
+{
+    std::set<int> faces = verticesToFaces[v];
+    verticesToQ[v] = Eigen::Matrix4d::Zero();
+    for (int face : faces)
+    {
+        verticesToQ[v] += calculateKp(equation_plane(F.row(face), V));
+    }
+}
+
+void MeshSimplification::post_collapse(const int e)
+{
+    updateVerticesToFaces(e);
+    // update the Q of v'
+    verticesToQ[E(e, 0)] += verticesToQ[E(e, 1)];
+    verticesToQ[E(e, 1)] = verticesToQ[(e, 0)];
+
+    // if statement based on count to see if we should re calculate Qs
+    if (collapseCounter >= QResetInterval)
+    {
+        for (int vertex : verticesToUpdate)
+            calculateQ(vertex);
+        verticesToUpdate.clear();
+        collapseCounter = 0;
+    }
+}
+
+void MeshSimplification::updateVerticesToFaces(const int e)
+{
+    int v0 = E(e, 0), v1 = E(e, 1);
+    int f0 = EF(e, 0), f1 = EF(e, 1);
+    int n0 = EI(e, 0), n1 = EI(e, 1);
+    verticesToFaces[v0].erase(f0);
+    verticesToFaces[v0].erase(f1);
+    verticesToFaces[v1].erase(f0);
+    verticesToFaces[v1].erase(f1);
+    verticesToFaces[n0].erase(f0);
+    verticesToFaces[n1].erase(f1);
+
+    // Copy all of the remaining faces from v0 to v1 and vice versa
+    verticesToFaces[v0].merge(verticesToFaces[v1]);
+    verticesToFaces[v1] = verticesToFaces[v0];
 }
 
 bool MeshSimplification::collapse_edge()
@@ -213,10 +256,17 @@ bool MeshSimplification::collapse_edge()
         Nsv, Nsf, Ndv, Ndf,
         V, F, E, EMAP, EF, EI, e1, e2, f1, f2);
 
+
     //post_collapse(V, F, E, EMAP, EF, EI, Q, EQ, C, e, e1, e2, f1, f2, collapsed);
 
     if (collapsed)
     {
+        for (int i = 0; i < Nsv.size(); i++)
+            verticesToUpdate.insert(Nsv.at(i));
+        for (int i = 0; i < Ndv.size(); i++)
+            verticesToUpdate.insert(Ndv.at(i));
+        post_collapse(e);
+
         std::cout << "Edge: " << e << ", Cost = " << std::get<0>(p) << ", New position: ("
             << C.row(e) << ")" << std::endl;
 
@@ -287,8 +337,7 @@ void MeshSimplification::createDecimatedMesh()
     {
         int collapsed_edges = 0;
         const int max_iter = (std::ceil(0.1 * Q.size()));
-        const int heapResetInterval = (max_iter / 10) > 0 ? max_iter / 10 : 1;
-        std::cout << "for testing purposes: maxIter" << max_iter << std::endl;
+        QResetInterval = (max_iter / 100) > 0 ? max_iter / 100 : 1;
         for (int j = 0; j < max_iter; j++)
         {
             if (!collapse_edge())
@@ -296,13 +345,7 @@ void MeshSimplification::createDecimatedMesh()
                 break;
             }
             collapsed_edges++;
-            if (j % heapResetInterval == 0)
-            {
-                
-                // re-calculate Qs for some vertices kept in some database
-                // so we need to remake calculateQs such that it receives a vector of int of which
-                // vertices to calculate Q for
-            }
+            collapseCounter++;
         }
         if (collapsed_edges > 0)
         {

@@ -29,6 +29,8 @@ private:
     std::shared_ptr<cg3d::Mesh> currentMesh;
     int decimations;
     int collapseCounter;
+    int QResetInterval;
+    std::set<int> verticesToUpdate;
     Eigen::MatrixXd V;
     Eigen::MatrixXi F;
     Eigen::MatrixXi E;
@@ -39,13 +41,16 @@ private:
     Eigen::VectorXi EQ;
     Eigen::MatrixXd C;
     std::vector<Eigen::Matrix4d> verticesToQ;
-    std::map<int, std::vector<int>> verticesToFaces;
+    std::map<int, std::set<int>> verticesToFaces;
 
     void Init();
     void createDecimatedMesh();
+    void post_collapse(const int e);
     Eigen::Vector4d equation_plane(Eigen::Vector3i triangle, Eigen::MatrixXd& V);
     Eigen::Matrix4d calculateKp(Eigen::Vector4d planeVector);
     void calculateQs();
+    void calculateQ(int v);
+    void updateVerticesToFaces(const int e);
     double calculateCost(Eigen::Matrix4d QMatrix, Eigen::Vector3d vertex);
     Eigen::Matrix4d calculateQDerive(Eigen::Matrix4d currentQ);
     Eigen::Vector4d FourDVertexFrom3D(Eigen::Vector3d vertex);
