@@ -49,7 +49,7 @@ std::shared_ptr<cg3d::Mesh> BasicScene::createDecimatedMesh(std::string filename
     for (int i = 0; i < decimations; i++)
     {
         int collapsed_edges = 0;
-        const int max_iter = std::ceil(0.01 * Q.size());
+        const int max_iter = std::ceil(0.1 * Q.size());
         for (int j = 0; j < max_iter; j++)
         {
             if (!igl::collapse_edge(igl::shortest_edge_and_midpoint, V, F, E, EMAP, EF, EI, Q, EQ, C))
@@ -85,7 +85,7 @@ void BasicScene::Init(float fov, int width, int height, float near, float far)
     auto material{ std::make_shared<Material>("material", program) }; // empty material
     material->AddTexture(0, "textures/box0.bmp", 2);
 
-    std::string objFile = "data/cube.off";
+    std::string objFile = "data/sphere.obj";
     int decimations = 6;
 
     auto morphFunc = [](Model* model, cg3d::Visitor* visitor) {
