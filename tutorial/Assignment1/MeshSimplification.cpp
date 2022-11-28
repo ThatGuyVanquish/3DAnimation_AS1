@@ -9,12 +9,13 @@ MeshSimplification::MeshSimplification(std::string filename, int _decimations) :
 {
     V = currentMesh->data[0].vertices, F = currentMesh->data[0].faces;
     igl::edge_flaps(F, E, EMAP, EF, EI);
-    Init();
-    createDecimatedMesh();
     blyat = Eigen::MatrixXd::Zero(F.rows(), 3);
     igl::per_face_normals(V, F, blyat);
     std::cout << "Per face normals\n" << blyat;
     std::cout << "\n";
+    Init();
+    createDecimatedMesh();
+    
 }
 
 std::shared_ptr<cg3d::Mesh> MeshSimplification::getMesh()
@@ -169,7 +170,8 @@ IGL_INLINE void MeshSimplification::quadratic_error_simplification(
     {
         vtag = derivedQtagInverse * v0001;
     }
-    p[0] = vtag[0], p[1] = vtag[1], p[2] = vtag[2];
+    //p[0] = vtag[0], p[1] = vtag[1], p[2] = vtag[2];
+    p = (V.row(vertex1) + V.row(vertex2)) / 2;
     cost = vtag.transpose() * Qtag * vtag;
 }
 
