@@ -25,7 +25,6 @@ std::shared_ptr<cg3d::Mesh> BasicScene::createDecimatedMesh(std::string filename
         V = OV;
         igl::edge_flaps(F, E, EMAP, EF, EI);
         C.resize(E.rows(), V.cols());
-        Eigen::VectorXd costs(E.rows());
         Q = {};
         EQ = Eigen::VectorXi::Zero(E.rows());
         {
