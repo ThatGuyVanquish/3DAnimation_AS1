@@ -203,6 +203,9 @@ bool MeshSimplification::collapse_edge()
 
     if (collapsed)
     {
+        std::cout << "Edge: " << e << ", Cost = " << std::get<0>(p) << ", New position: ("
+            << C.row(e) << ")" << std::endl;
+
         // Erase the two, other collapsed edges by marking their timestamps as -1
         EQ(e1) = -1;
         EQ(e2) = -1;
@@ -243,7 +246,7 @@ bool MeshSimplification::collapse_edge()
         {
             // compute cost and potential placement
             double cost;
-            Eigen::RowVectorXd place;
+            Eigen::RowVectorXd place = Eigen::RowVectorXd::Zero(3);
             quadratic_error_simplification(ei, cost, place);
             // Increment timestamp
             EQ(ei)++;
@@ -270,7 +273,8 @@ void MeshSimplification::createDecimatedMesh()
     {
         int collapsed_edges = 0;
         const int max_iter = (int)(std::ceil(0.1 * Q.size()));
-        const int heapResetInterval = max_iter / 10;
+        const int heapResetInterval = (max_iter / 10) > 0 ? max_iter / 10 : 1;
+        std::cout << "for testing purposes: maxIter" << max_iter << std::endl;
         for (int j = 0; j < max_iter; j++)
         {
             if (!collapse_edge())
@@ -280,7 +284,7 @@ void MeshSimplification::createDecimatedMesh()
             collapsed_edges++;
             if (j % heapResetInterval == 0)
             {
-                std::cout << "for testing purposes: " << j << std::endl;
+                
                 // re-calculate Qs for some vertices kept in some database
                 // so we need to remake calculateQs such that it receives a vector of int of which
                 // vertices to calculate Q for
@@ -294,28 +298,3 @@ void MeshSimplification::createDecimatedMesh()
         }
     }
 }
-
-//int main() {
-//    auto currentMesh{ cg3d::IglLoader::MeshFromFiles("cyl_igl", "data/cube.off")};
-//    Eigen::MatrixXd V, OV;
-//    Eigen::MatrixXi F, OF;
-//
-//    igl::read_triangle_mesh("data/cube.off", OV, OF);
-//    // Prepare array-based edge data structures and priority queue
-//    Eigen::VectorXi EMAP;
-//    Eigen::MatrixXi E, EF, EI;
-//    igl::min_heap< std::tuple<double, int, int>> Q;
-//    // If an edge were collapsed, we'd collapse it to these points:
-//    Eigen::MatrixXd C;
-//    F = OV;
-//    V = OF;
-//    igl::edge_flaps(F, E, EMAP, EF, EI);
-//
-//    std::cout << "EMAP:\n*********************\n" << EMAP << "\n*********************\n" << std::endl;
-//    std::cout << "E:\n*********************\n" << E << "\n*********************\n" << std::endl;
-//    std::cout << "EF:\n*********************\n" << EF << "\n*********************\n" << std::endl;
-//    std::cout << "EI:\n*********************\n" << EI << "\n*********************\n" << std::endl;
-//    std::cout << "V:" << V << std::endl;
-//    std::cout << "F:\n*********************\n" << F << "\n*********************\n" << std::endl;
-//    return 0;
-//}
