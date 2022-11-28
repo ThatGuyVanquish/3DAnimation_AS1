@@ -24,7 +24,7 @@
 /*
 
     Mesh Simplification object holds a simplified mesh object
-    with 
+    with
 
 */
 class MeshSimplification
@@ -36,13 +36,15 @@ public:
 private:
     std::shared_ptr<cg3d::Mesh> currentMesh;
     int decimations;
+    int collapseCounter;
     Eigen::MatrixXd V;
     Eigen::MatrixXi F;
     Eigen::MatrixXi E;
     Eigen::VectorXi EMAP;
     Eigen::MatrixXi EF;
     Eigen::MatrixXi EI;
-    igl::min_heap<std::tuple<double, int>> Q;
+    igl::min_heap<std::tuple<double, int, int>> Q;
+    Eigen::VectorXi EQ;
     Eigen::MatrixXd C;
     std::vector<Eigen::Matrix4d> verticesToQ;
     std::map<int, std::vector<int>> verticesToFaces;

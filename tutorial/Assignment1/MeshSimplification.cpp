@@ -1,7 +1,9 @@
 #include "MeshSimplification.h"
 
-MeshSimplification::MeshSimplification(std::string filename, int _decimations):
-    currentMesh(cg3d::IglLoader::MeshFromFiles("Current Mesh", filename)), decimations(_decimations)
+MeshSimplification::MeshSimplification(std::string filename, int _decimations) :
+    currentMesh(cg3d::IglLoader::MeshFromFiles("Current Mesh", filename)),
+    decimations(_decimations),
+    collapseCounter(0)
 {
     V = currentMesh->data[0].vertices, F = currentMesh->data[0].faces;
     igl::edge_flaps(F, E, EMAP, EF, EI);
@@ -19,34 +21,35 @@ void MeshSimplification::Init()
     C.resize(E.rows(), V.cols());
     Eigen::VectorXd costs(E.rows());
     Q = {};
-    { // Build costs heap
-        calculateQs();
-        Eigen::VectorXd costs(E.rows());
-        igl::parallel_for(E.rows(), [&](const int e)
-            {
-                double cost = e;
-                Eigen::RowVectorXd p(1, 3);
-                //igl::shortest_edge_and_midpoint(e, V, F, E, EMAP, EF, EI, cost, p);
-                quadratic_error_simplification(e, cost, p);
-                C.row(e) = p;
-                costs(e) = cost;
-            }, 10000);
-        for (int e = 0; e < E.rows(); e++)
+    EQ = Eigen::VectorXi::Zero(E.rows());
+    // Build costs heap
+    calculateQs();
+    igl::parallel_for(E.rows(), [&](const int e)
         {
-            Q.emplace(costs(e), e);
-        }
-    }
-    for (int i = 0; i < F.rows(); i++)
+            double cost = e;
+            Eigen::RowVectorXd p(1, 3);
+            //igl::shortest_edge_and_midpoint(e, V, F, E, EMAP, EF, EI, cost, p);
+            quadratic_error_simplification(e, cost, p);
+            C.row(e) = p;
+            costs(e) = cost;
+        }, 10000);
+
+    for (int e = 0; e < E.rows(); e++)
     {
-        Eigen::VectorXi currentRowInF = F.row(i);
-        // prepare vertex to face map
-        verticesToFaces.clear();
-        for (int j = 0; j < currentRowInF.cols(); j++)
-        {
-            int vertexId = currentRowInF(j);
-            verticesToFaces[vertexId].push_back(i);
-        }
+        Q.emplace(costs(e), e, 0);
     }
+    
+    //for (int i = 0; i < F.rows(); i++)
+    //{
+    //    Eigen::VectorXi currentRowInF = F.row(i);
+    //    // prepare vertex to face map
+    //    verticesToFaces.clear();
+    //    for (int j = 0; j < currentRowInF.cols(); j++)
+    //    {
+    //        int vertexId = currentRowInF(j);
+    //        verticesToFaces[vertexId].push_back(i);
+    //    }
+    //}
 }
 
 Eigen::Vector4d MeshSimplification::equation_plane(Eigen::Vector3i triangle, Eigen::MatrixXd& V)
@@ -71,7 +74,6 @@ Eigen::Vector4d MeshSimplification::equation_plane(Eigen::Vector3i triangle, Eig
 
 Eigen::Matrix4d MeshSimplification::calculateKp(Eigen::Vector4d planeVector)
 {
-    std::cout << planeVector * planeVector.transpose() << std::endl;
     return planeVector * planeVector.transpose();
 }
 
@@ -143,99 +145,115 @@ IGL_INLINE void MeshSimplification::quadratic_error_simplification(
 }
 
 bool MeshSimplification::collapse_edge()
-{   
-    int e; // address of edge to collapse
+{
+    int e, e1, e2, f1, f2;
 
-    // a. takes out the lowest cost edge from queue
-    if (Q.empty())
+    std::tuple<double, int, int> p;
+    while (true)
     {
-        e = -1;
-        return false;
+        // Check if Q is empty
+        if (Q.empty())
+        {
+            // no edges to collapse
+            e = -1;
+            return false;
+        }
+        // pop from Q
+        p = Q.top();
+        if (std::get<0>(p) == std::numeric_limits<double>::infinity())
+        {
+            e = -1;
+            // min cost edge is infinite cost
+            return false;
+        }
+        Q.pop();
+        e = std::get<1>(p);
+        // Check if matches timestamp
+        if (std::get<2>(p) == EQ(e))
+        {
+            break;
+        }
+        // must be stale or dead.
+        assert(std::get<2>(p) < EQ(e) || EQ(e) == -1);
+        // try again.
     }
 
-    std::tuple<double, int> currentEdge = Q.top();
-    if (std::get<0>(currentEdge) == std::numeric_limits<double>::infinity())
+    // Why is this computed up here?
+    // If we just need original face neighbors of edge, could we gather that more
+    // directly than gathering face neighbors of each vertex?
+    std::vector<int> /*Nse,*/Nsf, Nsv;
+    igl::circulation(e, true, F, EMAP, EF, EI,/*Nse,*/Nsv, Nsf);
+    std::vector<int> /*Nde,*/Ndf, Ndv;
+    igl::circulation(e, false, F, EMAP, EF, EI,/*Nde,*/Ndv, Ndf);
+
+    bool collapsed = igl::collapse_edge(
+        e, C.row(e),
+        Nsv, Nsf, Ndv, Ndf,
+        V, F, E, EMAP, EF, EI, e1, e2, f1, f2);
+
+    //post_collapse(V, F, E, EMAP, EF, EI, Q, EQ, C, e, e1, e2, f1, f2, collapsed);
+
+    if (collapsed)
     {
-        e = -1;
-        // min cost edge is infinite cost
-        return false;
+        // Erase the two, other collapsed edges by marking their timestamps as -1
+        EQ(e1) = -1;
+        EQ(e2) = -1;
+        
+        // update local neighbors
+        // loop over original face neighbors
+        //
+        // Can't use previous computed Nse and Nde because those refer to EMAP
+        // before it was changed...
+        std::vector<int> Nf;
+        Nf.reserve(Nsf.size() + Ndf.size()); // preallocate memory
+        Nf.insert(Nf.end(), Nsf.begin(), Nsf.end());
+        Nf.insert(Nf.end(), Ndf.begin(), Ndf.end());
+        // https://stackoverflow.com/a/1041939/148668
+        std::sort(Nf.begin(), Nf.end());
+        Nf.erase(std::unique(Nf.begin(), Nf.end()), Nf.end());
+        // Collect all edges that must be updated
+        std::vector<int> Ne;
+        Ne.reserve(3 * Nf.size());
+        for (auto& n : Nf)
+        {
+            if (F(n, 0) != IGL_COLLAPSE_EDGE_NULL ||
+                F(n, 1) != IGL_COLLAPSE_EDGE_NULL ||
+                F(n, 2) != IGL_COLLAPSE_EDGE_NULL)
+            {
+                for (int v = 0; v < 3; v++)
+                {
+                    // get edge id
+                    const int ei = EMAP(v * F.rows() + n);
+                    Ne.push_back(ei);
+                }
+            }
+        }
+        // Only process edge once
+        std::sort(Ne.begin(), Ne.end());
+        Ne.erase(std::unique(Ne.begin(), Ne.end()), Ne.end());
+        for (auto& ei : Ne)
+        {
+            // compute cost and potential placement
+            double cost;
+            Eigen::RowVectorXd place;
+            quadratic_error_simplification(ei, cost, place);
+            // Increment timestamp
+            EQ(ei)++;
+            // Replace in queue
+            Q.emplace(cost, ei, EQ(ei));
+            C.row(ei) = place;
+        }
     }
-    else e = std::get<1>(currentEdge);
-    Q.pop();
-    const Eigen::RowVectorXd p = C.row(e);
-    igl::collapse_edge(
-        e,
-        p,
-        V,
-        F,
-        E,
-        EMAP,
-        EF,
-        EI
-    );
-    std::cout << "edge " << e << ", cost = " << std::get<0>(currentEdge) <<
-        ", new v position (" << p(0) << ", " << p(1) << ", " << p(2) << ")" << std::endl;
-
-    //// b. add the new vertex into V
-    //int v1 = E(e, 0), v2 = E(e, 1);
-    ////double cost;
-    //Eigen::RowVectorXd p = C.row(e);
-    ////quadratic_error_simplification(e, cost, p);
-    //
-    //// new shit
-    ///*V.conservativeResize(V.rows() + 1, V.cols());
-    //int newVertexIndex = V.rows() - 1;
-    //V.row(newVertexIndex) = p;*/
-    //V.row(v1) = p, V.row(v2) = p;
-    //
-    //// c. remove old vertices from V, F so we could call edge_flaps to rebuild E, EF, EI, EMAP
-    //F.row(EF(e, 0)) = Eigen::Vector3i(0, 0, 0);
-    //F.row(EF(e, 1)) = Eigen::Vector3i(0, 0, 0);
-    //std::vector<int> facesOfV1 = verticesToFaces[v1];
-    //// new
-    //std::vector<int> facesForV2;
-    //// idea - instead of adding a new vertex, we set the values of
-    //// the faces of v1 and v2 to be the same and remove the faces we removed, 
-    //// making them in theory the same vertex
-    //for (int i = 0; i < facesOfV1.size(); i++)
-    //{
-    //    if (facesOfV1[i] == EF(e, 0) || facesOfV1[i] == EF(e, 1))
-    //    {
-    //        facesOfV1.erase(facesOfV1.begin() + i); // concurrent modification?
-    //        i--;
-    //    }
-    //    /*verticesToFaces[newVertexIndex].push_back(face);
-    //    for (int i = 0; i < 3; i++)
-    //        if (F(face, i) == v1)
-    //            F(face, i) = newVertexIndex;*/
-    //    // new
-    //    facesForV2.push_back(facesOfV1[i]);
-    //}
-    //std::vector<int> facesOfV2 = verticesToFaces[v2];
-    //std::vector<int> facesForV1;
-    //for (int i = 0; i < facesOfV2.size(); i++)
-    //{
-    //    if (facesOfV2[i] == EF(e, 0) || facesOfV2[i] == EF(e, 1))
-    //    {
-    //        facesOfV2.erase(facesOfV2.begin() + i); // concurrent modification?
-    //        i--;
-    //    }
-    //    /*verticesToFaces[newVertexIndex].push_back(face);
-    //    for (int i = 0; i < 3; i++)
-    //        if (F(face, i) == v2)
-    //            F(face, i) = newVertexIndex;*/
-    //    facesForV1.push_back(facesOfV2[i]);
-    //}
-    //for (int face : facesForV2)
-    //    facesOfV2.push_back(face);
-    //for (int face : facesForV1)
-    //    facesOfV1.push_back(face);
-
-    ////verticesToFaces.erase(v1);
-    ////verticesToFaces.erase(v2);
-    //igl::edge_flaps(F, E, EMAP, EF, EI);
-
-    return true;
+    else
+    {
+        // reinsert with infinite weight (the provided cost function must **not**
+        // have given this un-collapsable edge inf cost already)
+        // Increment timestamp
+        EQ(e)++;
+        // Replace in queue
+        Q.emplace(std::numeric_limits<double>::infinity(), e, EQ(e));
+    }
+    return collapsed;
 }
 
 void MeshSimplification::createDecimatedMesh()
@@ -255,7 +273,9 @@ void MeshSimplification::createDecimatedMesh()
             if (j % heapResetInterval == 0)
             {
                 std::cout << "for testing purposes: " << j << std::endl;
-                Init(); // resets the cost heap and C matrix of new vertex positions
+                // re-calculate Qs for some vertices kept in some database
+                // so we need to remake calculateQs such that it receives a vector of int of which
+                // vertices to calculate Q for
             }
         }
         if (collapsed_edges > 0)
