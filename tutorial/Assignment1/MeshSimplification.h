@@ -13,6 +13,7 @@
 #include "../engine/Mesh.h"
 #include <Eigen/LU> 
 #include <map>
+#include <igl/per_face_normals.h>
 /*
 
     Mesh Simplification object holds a simplified mesh object
@@ -31,6 +32,7 @@ private:
     int collapseCounter;
     int QResetInterval;
     std::set<int> verticesToUpdate;
+    Eigen::MatrixXd blyat;
     Eigen::MatrixXd V;
     Eigen::MatrixXi F;
     Eigen::MatrixXi E;

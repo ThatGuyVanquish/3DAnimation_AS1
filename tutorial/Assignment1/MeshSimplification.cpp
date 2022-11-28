@@ -11,6 +11,10 @@ MeshSimplification::MeshSimplification(std::string filename, int _decimations) :
     igl::edge_flaps(F, E, EMAP, EF, EI);
     Init();
     createDecimatedMesh();
+    blyat = Eigen::MatrixXd::Zero(F.rows(), 3);
+    igl::per_face_normals(V, F, blyat);
+    std::cout << "Per face normals\n" << blyat;
+    std::cout << "\n";
 }
 
 std::shared_ptr<cg3d::Mesh> MeshSimplification::getMesh()
@@ -28,7 +32,6 @@ void MeshSimplification::Init()
     calculateQs();
     for (int e = 0; e < E.rows(); e++)
     {
-        Eigen::VectorXd costs(E.rows());
         double cost = e;
         Eigen::RowVectorXd p(1, 3);
         quadratic_error_simplification(e, cost, p);
@@ -107,8 +110,13 @@ void MeshSimplification::calculateQs()
     for (int i = 0; i < F.rows(); i++)
     {
         Eigen::VectorXi currentRowInF = F.row(i);
-        auto currentPlaneVector = equation_plane(currentRowInF, V);
-        auto KpForPlaneI = calculateKp(currentPlaneVector);
+        std::cout << "Blyat" << std::endl;
+        Eigen::Vector3d test = blyat.row(i);
+        std::cout << "Blyat2" << std::endl;
+        Eigen::Vector4d test2 = FourDVertexFrom3D(test);
+        std::cout << "Shons mom is \n" << test2 << std::endl;
+        //auto currentPlaneVector = equation_plane(currentRowInF, V);
+        auto KpForPlaneI = calculateKp(test2);
         for (int j = 0; j < 3; j++)
         {
             int currentVertex = currentRowInF[j];
@@ -171,7 +179,10 @@ void MeshSimplification::calculateQ(int v)
     verticesToQ[v] = Eigen::Matrix4d::Zero();
     for (int face : faces)
     {
-        verticesToQ[v] += calculateKp(equation_plane(F.row(face), V));
+        auto test = blyat.row(face);
+        auto test2 = FourDVertexFrom3D(test);
+        //verticesToQ[v] += calculateKp(equation_plane(F.row(face), V));
+        verticesToQ[v] += calculateKp(test2);
     }
 }
 
@@ -256,9 +267,6 @@ bool MeshSimplification::collapse_edge()
         Nsv, Nsf, Ndv, Ndf,
         V, F, E, EMAP, EF, EI, e1, e2, f1, f2);
 
-
-    //post_collapse(V, F, E, EMAP, EF, EI, Q, EQ, C, e, e1, e2, f1, f2, collapsed);
-
     if (collapsed)
     {
         for (int i = 0; i < Nsv.size(); i++)
@@ -337,7 +345,8 @@ void MeshSimplification::createDecimatedMesh()
     {
         int collapsed_edges = 0;
         const int max_iter = (std::ceil(0.1 * Q.size()));
-        QResetInterval = (max_iter / 100) > 0 ? max_iter / 100 : 1;
+        std::cout << "Max iter is " << max_iter << " at decimation i = " << i << std::endl;
+        QResetInterval = (max_iter / 10) > 0 ? max_iter / 10 : 1;
         for (int j = 0; j < max_iter; j++)
         {
             if (!collapse_edge())
