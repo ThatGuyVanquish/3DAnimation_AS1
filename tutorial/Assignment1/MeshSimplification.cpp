@@ -17,6 +17,7 @@ MeshSimplification::MeshSimplification(std::string filename, int _decimations) :
     //std::cout << "\n";
     Init();
     createDecimatedMesh();
+    //printVtoQ();
     }
 
 /*
@@ -42,6 +43,12 @@ Eigen::Vector3d MeshSimplification::FourDimVecToThreeDim(Eigen::Vector4d vertex)
     Eigen::Vector3d newVertex;
     newVertex[0] = vertex[0], newVertex[1] = vertex[1], newVertex[2] = vertex[2];
     return newVertex;
+}
+
+void MeshSimplification::printVtoQ()
+{
+    for (int i = 0; i < verticesToQ.size(); i++)
+        std::cout << "\n\nVertex is " << i << "\n" << verticesToQ.at(i) << "\n\n";
 }
 
 /*
@@ -76,25 +83,14 @@ double MeshSimplification::calculateCost(const int vertex)
 
 void MeshSimplification::buildVerticesToFaces()
 {
-    //std::cout << "TEST " << V.row(380) << std::endl;
-    //std::cout << "TEST " << V.row(381) << std::endl;
     for (int i = 0; i < F.rows(); i++)
     {
         Eigen::VectorXi currentRowInF = F.row(i);
-        //std::cout << "Face: " << currentRowInF.transpose() << std::endl;
         // prepare vertex to face map
         for (int j = 0; j < 3; j++)
         {
             int vertexId = currentRowInF(j);
-            std::cout << "Set at vertexId " << vertexId << " before is:\n";
-            for (int num : verticesToFaces[vertexId])
-                std::cout << num << "   ";
-            std::cout << std::endl;
             verticesToFaces[vertexId].insert(i);
-            std::cout << "Set at vertexId " << vertexId << " after is:\n";
-            for (int num : verticesToFaces[vertexId])
-                std::cout << num << "   ";
-            std::cout << std::endl;
         }
     }
 }
@@ -181,6 +177,7 @@ IGL_INLINE void MeshSimplification::quadratic_error_simplification(
     Eigen::Matrix4d derivedQtagInverse;
     bool invertible = false;
     double determinant;
+    //std::cout << "Derived QTAG\n" << derivedQtag << std::endl;
     derivedQtag.computeInverseAndDetWithCheck(derivedQtagInverse, determinant, invertible);
     Eigen::Vector4d vtag;
     Eigen::Vector4d v0001;
@@ -193,13 +190,23 @@ IGL_INLINE void MeshSimplification::quadratic_error_simplification(
     {
         Eigen::Vector4d v1 = ThreeDimVecToFourDim(V.row(vertex1)), v2 = ThreeDimVecToFourDim(V.row(vertex2));
         Eigen::Vector4d v3 = (v1 + v2) / 2;
+        //std::cout << "V1 " << v1.transpose() << "\nV2 " << v2.transpose() << "\nV3 " << v3.transpose() << std::endl;
+
         double costV1 = v1.transpose() * Qtag * v1, costV2 = v2.transpose() * Qtag * v2, costV3 = v3.transpose() * Qtag * v3;
         vtag = costV1 <= costV2 ? 
             (costV1 <= costV3 ? v1 : v3) : // costV1 <= costV3 <= costV2, otherwise costV3 < costV1 <= costV2
             costV2 <= costV3 ? v2 : v3;    // costV2 <= costV1 <= costV3, otherwise costV3 < costV2 <= costV1
+        //std::cout << "Cost 1: " << costV1 << "\n\n" <<
+        //    "V1:\n" << v1 << "\nQTag\n" << Qtag << "\n\nv1 transpose:" << v1.transpose() << "\n\n" << std::endl;
+        //std::cout << "Cost 2: " << costV2 << "\n\n" <<
+        //    "V1:\n" << v2 << "\nQTag\n" << Qtag << "\n\nv2 transpose: " << v2.transpose() << "\n\n" << std::endl;
+        //std::cout << "Cost 3: " << costV3 << "\n\n" <<
+        //    "V1:\n" << v3 << "\nQTag\n" << Qtag << "\n\nv3 transpose: " << v3.transpose() << "\n\n" << std::endl;
+        //std::cout << "VTag: " << vtag.transpose() << std::endl;
     }
     else
     {
+        //std::cout << "QTAG Inverse * QTAG\n" << derivedQtag * derivedQtagInverse << std::endl;
         vtag = derivedQtagInverse * v0001;
     }
     p = FourDimVecToThreeDim(vtag);
@@ -213,11 +220,14 @@ bool MeshSimplification::collapse_edge()
 
     std::tuple<double, int, int> costEdgeTimestamp;
 
+    //int count = 0;
     while (true)
     {
+        //count++;
         // Check if Q is empty
         if (Q.empty())
         {
+            std::cout << "Q is empty\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" << std::endl;
             // no edges to collapse
             e = -1;
             return false;
@@ -226,6 +236,7 @@ bool MeshSimplification::collapse_edge()
         costEdgeTimestamp = Q.top();
         if (std::get<0>(costEdgeTimestamp) == std::numeric_limits<double>::infinity())
         {
+            std::cout << "got an edge with infinity cost\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" << std::endl;
             e = -1;
             // Min cost edge is infinite cost
             return false;
@@ -241,7 +252,7 @@ bool MeshSimplification::collapse_edge()
         assert(std::get<2>(costEdgeTimestamp) < EQ(e) || EQ(e) == -1);
         // therefore try again
     }
-
+    //std::cout << count << std::endl;
     std::vector<int> /*Nse,*/Nsf, Nsv;
     igl::circulation(e, true, F, EMAP, EF, EI,/*Nse,*/Nsv, Nsf);
     std::vector<int> /*Nde,*/Ndf, Ndv;
@@ -260,8 +271,8 @@ bool MeshSimplification::collapse_edge()
             verticesToUpdate.insert(Ndv.at(i));
         post_collapse(e);
 
-        std::cout << "Edge: " << e << ", Cost = " << std::get<0>(costEdgeTimestamp) << ", New position: ("
-            << C.row(e) << ")" << std::endl;
+        //std::cout << "Edge: " << e << ", Cost = " << std::get<0>(costEdgeTimestamp) << ", New position: ("
+        //    << C.row(e) << ")" << std::endl;
 
         // Erase the two, other collapsed edges by marking their timestamps as -1
         EQ(e1) = -1;
@@ -316,6 +327,7 @@ bool MeshSimplification::collapse_edge()
         // Re-insert with infinite weight (the provided cost function must **not**
         // have given this un-collapsable edge inf cost already)
         // Increment timestamp
+        std::cout << "We didn't collapse woohoo" << std::endl;
         EQ(e)++;
         // Replace in queue
         Q.emplace(std::numeric_limits<double>::infinity(), e, EQ(e));
@@ -344,7 +356,6 @@ void MeshSimplification::Init()
     }
     
     calculateQs(verticesToCalculate);
-
     // Calculate cost of collapse and new vertex placement after collapse
     for (int e = 0; e < E.rows(); e++)
     {
@@ -375,12 +386,13 @@ void MeshSimplification::createDecimatedMesh()
     {
         int collapsed_edges = 0;
         const int max_iter = (std::ceil(0.1 * Q.size()));
-        //std::cout << "Max iter is " << max_iter << " at decimation i = " << i << std::endl;
-        QResetInterval = (max_iter / 10) > 0 ? max_iter / 10 : 1;
+        std::cout << "Max iter is " << max_iter << " at decimation i = " << i << std::endl;
+        QResetInterval = 1;
         for (int j = 0; j < max_iter; j++)
         {
             if (!collapse_edge())
             {
+                std::cout << "Collapse edge failing after " << j << " edges in iteration " << i << "\n";
                 break;
             }
             collapsed_edges++;

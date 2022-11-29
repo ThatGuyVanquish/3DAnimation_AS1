@@ -14,6 +14,7 @@
 #include <Eigen/LU> 
 #include <map>
 #include <igl/per_face_normals.h>
+#include <igl/vertex_triangle_adjacency.h>
 #include <numeric>
 
 /*
@@ -50,6 +51,7 @@ private:
     // Helper functions
     Eigen::Vector4d ThreeDimVecToFourDim(Eigen::Vector3d vertex);
     Eigen::Vector3d FourDimVecToThreeDim(Eigen::Vector4d vertex);
+    void printVtoQ();
 
     // Methods to calculate Q matrices
     Eigen::Vector4d calculatePlaneNormal(int face);
