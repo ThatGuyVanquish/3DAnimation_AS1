@@ -33,7 +33,7 @@ std::shared_ptr<cg3d::Mesh> MeshSimplification::getMesh()
 Eigen::Vector4d MeshSimplification::ThreeDimVecToFourDim(Eigen::Vector3d vertex)
 {
     Eigen::Vector4d newVertex;
-    newVertex[0] = vertex[0], newVertex[1] = vertex[1], newVertex[2] = vertex[2], newVertex[3] = d;
+    newVertex[0] = vertex[0], newVertex[1] = vertex[1], newVertex[2] = vertex[2], newVertex[3] = 1;
     return newVertex;
 }
 
@@ -50,34 +50,15 @@ Eigen::Vector3d MeshSimplification::FourDimVecToThreeDim(Eigen::Vector4d vertex)
 
 */
 
-Eigen::Vector4d MeshSimplification::equation_plane(Eigen::Vector3i triangle)
-{
-    auto x2MinusX1 = V.row(triangle[1]) - V.row(triangle[0]);
-    double a1 = x2MinusX1[0];
-    double b1 = x2MinusX1[1];
-    double c1 = x2MinusX1[2];
-    auto x3MinusX1 = V.row(triangle[2]) - V.row(triangle[0]);
-    double a2 = x3MinusX1[0];
-    double b2 = x3MinusX1[1];
-    double c2 = x3MinusX1[2];
-    double a = b1 * c2 - b2 * c1;
-    double b = a2 * c1 - a1 * c2;
-    double c = a1 * b2 - b1 * a2;
-    double d = (-a * V.row(triangle[0])[0] - b * V.row(triangle[0])[1] - c * V.row(triangle[0])[2]);
-    double normalizer = sqrt(pow(a, 2) + pow(b, 2) + pow(c, 2));
-    Eigen::Vector4d ret;
-    ret(0) = a / normalizer, ret(1) = b / normalizer, ret(2) = c / normalizer, ret(3) = d / normalizer;
-    return ret;
-}
-
 Eigen::Vector4d MeshSimplification::calculatePlaneNormal(int face)
 {
     Eigen::Vector3d planeIn3D = faceNormals.row(face);
     Eigen::Vector3d vertex = V.row(F(face,0));
-    int d = -(vertex[0] * planeIn3D[0] + vertex[1] * planeIn3D[1] + vertex[2] * planeIn3D[2]);
+    double d = -(vertex[0] * planeIn3D[0] + vertex[1] * planeIn3D[1] + vertex[2] * planeIn3D[2]);
+    //std::cout << "D is " << d << std::endl;
     Eigen::Vector4d planeIn4D = ThreeDimVecToFourDim(planeIn3D);
-    std::cout << "Current face normal is\n" << planeIn4D << std::endl;
-    //std::cout << "Current normal based on algebra is\n" << equation_plane(F.row(face)) << std::endl;
+    planeIn4D[3] = d;
+    //std::cout << "Current face normal is\n" << planeIn4D << std::endl;
     return planeIn4D;
 }
 
@@ -95,14 +76,25 @@ double MeshSimplification::calculateCost(const int vertex)
 
 void MeshSimplification::buildVerticesToFaces()
 {
+    //std::cout << "TEST " << V.row(380) << std::endl;
+    //std::cout << "TEST " << V.row(381) << std::endl;
     for (int i = 0; i < F.rows(); i++)
     {
         Eigen::VectorXi currentRowInF = F.row(i);
+        //std::cout << "Face: " << currentRowInF.transpose() << std::endl;
         // prepare vertex to face map
-        for (int j = 0; j < currentRowInF.cols(); j++)
+        for (int j = 0; j < 3; j++)
         {
             int vertexId = currentRowInF(j);
+            std::cout << "Set at vertexId " << vertexId << " before is:\n";
+            for (int num : verticesToFaces[vertexId])
+                std::cout << num << "   ";
+            std::cout << std::endl;
             verticesToFaces[vertexId].insert(i);
+            std::cout << "Set at vertexId " << vertexId << " after is:\n";
+            for (int num : verticesToFaces[vertexId])
+                std::cout << num << "   ";
+            std::cout << std::endl;
         }
     }
 }
@@ -113,7 +105,9 @@ void MeshSimplification::calculateQ(int v)
     verticesToQ[v] = Eigen::Matrix4d::Zero();
     for (int face : faces)
     {
-        verticesToQ[v] += calculateKp(calculatePlaneNormal(face));
+        Eigen::Vector4d normal = calculatePlaneNormal(face);
+        Eigen::Matrix4d Kp = calculateKp(normal);
+        verticesToQ[v] += Kp;
     }
 }
 

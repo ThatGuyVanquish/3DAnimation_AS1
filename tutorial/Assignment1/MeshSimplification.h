@@ -53,7 +53,6 @@ private:
 
     // Methods to calculate Q matrices
     Eigen::Vector4d calculatePlaneNormal(int face);
-    Eigen::Vector4d equation_plane(Eigen::Vector3i triangle);
     Eigen::Matrix4d calculateKp(Eigen::Vector4d planeVector);
     double calculateCost(const int vertex);
     void buildVerticesToFaces();
