@@ -45,20 +45,22 @@ std::shared_ptr<cg3d::Mesh> BasicScene::createDecimatedMesh(std::string filename
     };
 
     reset();
-
+    int current_num_of_edges = E.rows();
     for (int i = 0; i < decimations; i++)
     {
         int collapsed_edges = 0;
-        const int max_iter = std::ceil(0.1 * Q.size());
+        const int max_iter = 0.033 * current_num_of_edges;
         for (int j = 0; j < max_iter; j++)
         {
             if (!igl::collapse_edge(igl::shortest_edge_and_midpoint, V, F, E, EMAP, EF, EI, Q, EQ, C))
             {
                 break;
             }
-            collapsed_edges++;
+            // 3 because in every collapse there are 3 edges deleted from E
+            collapsed_edges += 3;
         }
         if (collapsed_edges > 0) {
+            current_num_of_edges -= collapsed_edges;
             currentMesh->data.push_back({ V, F, currentMesh->data[0].vertexNormals, currentMesh->data[0].textureCoords });
         }
     }
@@ -86,7 +88,7 @@ void BasicScene::Init(float fov, int width, int height, float near, float far)
     material->AddTexture(0, "textures/box0.bmp", 2);
 
     std::string objFile = "data/sphere.obj";
-    int decimations = 6;
+    int decimations = 7;
 
     auto morphFunc = [](Model* model, cg3d::Visitor* visitor) {
         return model->meshIndex;
