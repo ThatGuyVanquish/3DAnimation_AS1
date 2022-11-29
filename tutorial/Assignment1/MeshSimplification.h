@@ -16,6 +16,7 @@
 #include <igl/per_face_normals.h>
 #include <igl/vertex_triangle_adjacency.h>
 #include <numeric>
+#include <cmath>
 
 /*
 
@@ -56,7 +57,6 @@ private:
     // Methods to calculate Q matrices
     Eigen::Vector4d calculatePlaneNormal(int face);
     Eigen::Matrix4d calculateKp(Eigen::Vector4d planeVector);
-    double calculateCost(const int vertex);
     void buildVerticesToFaces();
     void calculateQ(int v);
     void calculateQs(std::vector<int> verticesToCalculate);
@@ -66,6 +66,7 @@ private:
     void post_collapse(const int e);
     Eigen::Matrix4d calculateQDerive(Eigen::Matrix4d currentQ);
     void quadratic_error_simplification(const int e, double& cost, Eigen::RowVectorXd& p);
+    double calculateCost(Eigen::Vector4d vertex, Eigen::Matrix4d Q);
     bool collapse_edge();
     
     // Run methods
