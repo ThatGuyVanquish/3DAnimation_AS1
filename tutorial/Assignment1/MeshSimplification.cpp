@@ -209,8 +209,8 @@ IGL_INLINE void MeshSimplification::quadratic_error_simplification(
         //std::cout << "QTAG Inverse * QTAG\n" << derivedQtag * derivedQtagInverse << std::endl;
         vtag = derivedQtagInverse * v0001;
     }
-    p = FourDimVecToThreeDim(vtag);
-    //p = (V.row(vertex1) + V.row(vertex2)) / 2;
+    //p = FourDimVecToThreeDim(vtag);
+    p = (V.row(vertex1) + V.row(vertex2)) / 2;
     cost = vtag.transpose() * Qtag * vtag;
 }
 
@@ -227,7 +227,6 @@ bool MeshSimplification::collapse_edge()
         // Check if Q is empty
         if (Q.empty())
         {
-            std::cout << "Q is empty\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" << std::endl;
             // no edges to collapse
             e = -1;
             return false;
@@ -236,7 +235,6 @@ bool MeshSimplification::collapse_edge()
         costEdgeTimestamp = Q.top();
         if (std::get<0>(costEdgeTimestamp) == std::numeric_limits<double>::infinity())
         {
-            std::cout << "got an edge with infinity cost\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" << std::endl;
             e = -1;
             // Min cost edge is infinite cost
             return false;

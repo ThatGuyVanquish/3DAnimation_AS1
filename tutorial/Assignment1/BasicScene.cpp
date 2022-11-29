@@ -18,8 +18,8 @@ void BasicScene::Init(float fov, int width, int height, float near, float far)
     auto program = std::make_shared<Program>("shaders/basicShader");
     auto material{ std::make_shared<Material>("material", program)}; // empty material
     material->AddTexture(0, "textures/box0.bmp", 2);
-    //std::string objFile = "data/bunny.off";
-    std::string objFile = "data/sphere.obj";
+    std::string objFile = "data/bunny.off";
+    //std::string objFile = "data/sphere.obj";
     int decimations = 6;
     myMeshObj = std::make_shared<MeshSimplification>(MeshSimplification(objFile, decimations));
     std::cout << "TEST HERE" << std::endl;
