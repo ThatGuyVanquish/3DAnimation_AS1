@@ -256,6 +256,25 @@ bool MeshSimplification::collapse_edge()
     std::vector<int> /*Nde,*/Ndf, Ndv;
     igl::circulation(e, false, F, EMAP, EF, EI,/*Nde,*/Ndv, Ndf);
 
+    std::cout << "The next edge is " << E.row(e) << "\n*******************\n\n";
+
+    std::cout << "Neighbours of source s \n******************************\n";
+    for (int i = 0; i < Nsv.size(); i++)
+    {
+        std::cout << Nsv.at(i) << " ";
+        if (i > 0 && i % 10 == 0)
+            std::cout << "\n";
+    }
+    std::cout << "\n\nNeighbours of destination d \n******************************\n";
+    for (int i = 0; i < Ndv.size(); i++)
+    {
+        std::cout << Ndv.at(i) << " ";
+        if (i > 0 && i % 10 == 0)
+            std::cout << "\n";
+    }
+
+    std::cout << "\n\n\n\n";
+
     bool collapsed = igl::collapse_edge(
         e, C.row(e),
         Nsv, Nsf, Ndv, Ndf,
@@ -384,16 +403,16 @@ void MeshSimplification::createDecimatedMesh()
     int currentNumOfEdges = E.rows();
     for (int i = 0; i < decimations; i++)
     {
-        std::cout << "Size of Q is " << Q.size() << std::endl;
+        //std::cout << "Size of Q is " << Q.size() << std::endl;
         int collapsed_edges = 0;
         const int max_iter = (std::ceil(0.033 * currentNumOfEdges));
-        std::cout << "Max iter is " << max_iter << " at decimation i = " << i << std::endl;
+        //std::cout << "Max iter is " << max_iter << " at decimation i = " << i << std::endl;
         QResetInterval = 1;
         for (int j = 0; j < max_iter; j++)
         {
             if (!collapse_edge())
             {
-                std::cout << "Collapse edge failing after " << j << " edges in iteration " << i << "\n";
+                //std::cout << "Collapse edge failing after " << j << " edges in iteration " << i << "\n";
                 break;
             }
             collapsed_edges += 3;
