@@ -10,7 +10,7 @@ MeshSimplification::MeshSimplification(std::string filename, int _decimations) :
     V = currentMesh->data[0].vertices, F = currentMesh->data[0].faces;
     igl::edge_flaps(F, E, EMAP, EF, EI);
     faceNormals = Eigen::MatrixXd::Zero(F.rows(), 3);
-    igl::per_face_normals(V, F, faceNormals);
+    //igl::per_face_normals(V, F, faceNormals);
     for (int i = 0; i < V.rows(); i++)
         verticesToQ.push_back(Eigen::Matrix4d::Zero());
     //std::cout << "Per face normals\n" << blyat;
@@ -33,7 +33,7 @@ std::shared_ptr<cg3d::Mesh> MeshSimplification::getMesh()
 Eigen::Vector4d MeshSimplification::ThreeDimVecToFourDim(Eigen::Vector3d vertex)
 {
     Eigen::Vector4d newVertex;
-    newVertex[0] = vertex[0], newVertex[1] = vertex[1], newVertex[2] = vertex[2], newVertex[3] = 1;
+    newVertex[0] = vertex[0], newVertex[1] = vertex[1], newVertex[2] = vertex[2], newVertex[3] = d;
     return newVertex;
 }
 
@@ -50,10 +50,34 @@ Eigen::Vector3d MeshSimplification::FourDimVecToThreeDim(Eigen::Vector4d vertex)
 
 */
 
+Eigen::Vector4d MeshSimplification::equation_plane(Eigen::Vector3i triangle)
+{
+    auto x2MinusX1 = V.row(triangle[1]) - V.row(triangle[0]);
+    double a1 = x2MinusX1[0];
+    double b1 = x2MinusX1[1];
+    double c1 = x2MinusX1[2];
+    auto x3MinusX1 = V.row(triangle[2]) - V.row(triangle[0]);
+    double a2 = x3MinusX1[0];
+    double b2 = x3MinusX1[1];
+    double c2 = x3MinusX1[2];
+    double a = b1 * c2 - b2 * c1;
+    double b = a2 * c1 - a1 * c2;
+    double c = a1 * b2 - b1 * a2;
+    double d = (-a * V.row(triangle[0])[0] - b * V.row(triangle[0])[1] - c * V.row(triangle[0])[2]);
+    double normalizer = sqrt(pow(a, 2) + pow(b, 2) + pow(c, 2));
+    Eigen::Vector4d ret;
+    ret(0) = a / normalizer, ret(1) = b / normalizer, ret(2) = c / normalizer, ret(3) = d / normalizer;
+    return ret;
+}
+
 Eigen::Vector4d MeshSimplification::calculatePlaneNormal(int face)
 {
     Eigen::Vector3d planeIn3D = faceNormals.row(face);
+    Eigen::Vector3d vertex = V.row(F(face,0));
+    int d = -(vertex[0] * planeIn3D[0] + vertex[1] * planeIn3D[1] + vertex[2] * planeIn3D[2]);
     Eigen::Vector4d planeIn4D = ThreeDimVecToFourDim(planeIn3D);
+    std::cout << "Current face normal is\n" << planeIn4D << std::endl;
+    //std::cout << "Current normal based on algebra is\n" << equation_plane(F.row(face)) << std::endl;
     return planeIn4D;
 }
 
@@ -85,12 +109,11 @@ void MeshSimplification::buildVerticesToFaces()
 
 void MeshSimplification::calculateQ(int v)
 {
-    std::cout << "V to F size is " << verticesToFaces.size() << std::endl;
     std::set<int> faces = verticesToFaces[v];
     verticesToQ[v] = Eigen::Matrix4d::Zero();
     for (int face : faces)
     {
-        verticesToQ[v] += calculateKp(ThreeDimVecToFourDim(V.row(v)));
+        verticesToQ[v] += calculateKp(calculatePlaneNormal(face));
     }
 }
 
@@ -309,7 +332,7 @@ bool MeshSimplification::collapse_edge()
 void MeshSimplification::Init()
 {
     buildVerticesToFaces();
-    C.resize(E.rows(), V.cols());
+    C = Eigen::MatrixXd::Zero(E.rows(), 3);
     Eigen::VectorXd costs(E.rows());
     Q = {};
     EQ = Eigen::VectorXi::Zero(E.rows());
@@ -337,15 +360,14 @@ void MeshSimplification::Init()
         C.row(e) = p;
         costs(e) = cost;
     }
-    /*igl::parallel_for(E.rows(), [&](const int e)
-        {
-            Eigen::VectorXd costs(E.rows());
-            double cost = e;
-            Eigen::RowVectorXd p(1, 3);
-            quadratic_error_simplification(e, cost, p);
-            C.row(e) = p;
-            costs(e) = cost;
-        }, 10000);*/
+    //igl::parallel_for(E.rows(), [&](const int e)
+    //    {
+    //        double cost = e;
+    //        Eigen::RowVectorXd p(1, 3);
+    //        quadratic_error_simplification(e, cost, p);
+    //        C.row(e) = p;
+    //        costs(e) = cost;
+    //    }, 10000);
 
     for (int e = 0; e < E.rows(); e++)
     {
@@ -359,7 +381,7 @@ void MeshSimplification::createDecimatedMesh()
     {
         int collapsed_edges = 0;
         const int max_iter = (std::ceil(0.1 * Q.size()));
-        std::cout << "Max iter is " << max_iter << " at decimation i = " << i << std::endl;
+        //std::cout << "Max iter is " << max_iter << " at decimation i = " << i << std::endl;
         QResetInterval = (max_iter / 10) > 0 ? max_iter / 10 : 1;
         for (int j = 0; j < max_iter; j++)
         {
