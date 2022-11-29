@@ -311,7 +311,7 @@ bool MeshSimplification::collapse_edge()
         {
             // Compute cost and potential placement
             double cost;
-            Eigen::RowVectorXd newCoords = Eigen::RowVectorXd::Zero(3);
+            Eigen::RowVectorXd newCoords;
             quadratic_error_simplification(ei, cost, newCoords);
             // Increment timestamp
             EQ(ei)++;
@@ -376,14 +376,17 @@ void MeshSimplification::Init()
     {
         Q.emplace(costs(e), e, 0);
     }
+
 }
 
 void MeshSimplification::createDecimatedMesh()
 {
+    int currentNumOfEdges = E.rows();
     for (int i = 0; i < decimations; i++)
     {
+        std::cout << "Size of Q is " << Q.size() << std::endl;
         int collapsed_edges = 0;
-        const int max_iter = (std::ceil(0.1 * Q.size()));
+        const int max_iter = (std::ceil(0.033 * currentNumOfEdges));
         std::cout << "Max iter is " << max_iter << " at decimation i = " << i << std::endl;
         QResetInterval = 1;
         for (int j = 0; j < max_iter; j++)
@@ -393,11 +396,12 @@ void MeshSimplification::createDecimatedMesh()
                 std::cout << "Collapse edge failing after " << j << " edges in iteration " << i << "\n";
                 break;
             }
-            collapsed_edges++;
-            collapseCounter++;
+            collapsed_edges += 3;
+            collapseCounter += 3;
         }
         if (collapsed_edges > 0)
         {
+            currentNumOfEdges -= collapsed_edges;
             currentMesh->data.push_back(
                 { V, F, currentMesh->data[0].vertexNormals, currentMesh->data[0].textureCoords }
             );
