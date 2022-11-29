@@ -35,7 +35,6 @@ private:
     int decimations;
     int collapseCounter;
     int QResetInterval;
-    std::set<int> verticesToUpdate;
     Eigen::MatrixXd faceNormals;
     Eigen::MatrixXd V;
     Eigen::MatrixXi F;

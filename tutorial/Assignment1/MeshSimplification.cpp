@@ -4,13 +4,11 @@ MeshSimplification::MeshSimplification(std::string filename, int _decimations) :
     currentMesh(cg3d::IglLoader::MeshFromFiles("Current Mesh", filename)),
     decimations(_decimations),
     collapseCounter(0),
-    verticesToUpdate(),
     QResetInterval(0)
 {
     V = currentMesh->data[0].vertices, F = currentMesh->data[0].faces;
     igl::edge_flaps(F, E, EMAP, EF, EI);
     faceNormals = Eigen::MatrixXd::Zero(F.rows(), 3);
-    //igl::per_face_normals(V, F, faceNormals);
     for (int i = 0; i < V.rows(); i++)
         verticesToQ.push_back(Eigen::Matrix4d::Zero());
     Init();
@@ -266,10 +264,6 @@ bool MeshSimplification::collapse_edge()
 
     if (collapsed)
     {
-        for (int i = 0; i < Nsv.size(); i++)
-            verticesToUpdate.insert(Nsv.at(i));
-        for (int i = 0; i < Ndv.size(); i++)
-            verticesToUpdate.insert(Ndv.at(i));
         post_collapse(e);
 
         std::cout << "Edge: " << e << ", Cost = " << std::get<0>(costEdgeTimestamp) << ", New position: ("
