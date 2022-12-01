@@ -35,42 +35,19 @@ private:
     int decimations;
     int collapseCounter;
     int QResetInterval;
-    Eigen::MatrixXd faceNormals;
-    Eigen::MatrixXd V;
-    Eigen::MatrixXi F;
-    Eigen::MatrixXi E;
-    Eigen::VectorXi EMAP;
-    Eigen::MatrixXi EF;
-    Eigen::MatrixXi EI;
-    igl::min_heap<std::tuple<double, int, int>> Q;
-    Eigen::VectorXi EQ;
-    Eigen::MatrixXd C;
-    std::vector<Eigen::Matrix4d> verticesToQ;
-    std::map<int, std::set<int>> verticesToFaces;
     
     // Helper functions
     Eigen::Vector4d ThreeDimVecToFourDim(Eigen::Vector3d vertex);
     Eigen::Vector3d FourDimVecToThreeDim(Eigen::Vector4d vertex);
-    void printVtoQ();
 
     // Methods to calculate Q matrices
-    Eigen::Vector4d calculatePlaneNormal(int face);
+    Eigen::Vector4d calculatePlaneNormal(const Eigen::MatrixXd& V, Eigen::Vector3d threeDimNormal, int vi);
     Eigen::Matrix4d calculateKp(Eigen::Vector4d planeVector);
-    void buildVerticesToFaces();
-    void calculateQ(int v);
-    void calculateQs(std::vector<int> verticesToCalculate);
 
     // Edge collapsing methods
-    void updateVerticesToFacesPostCollapse(const int e);
-    void post_collapse(const int e);
     Eigen::Matrix4d calculateQDerive(Eigen::Matrix4d currentQ);
-    void quadratic_error_simplification(const int e, double& cost, Eigen::RowVectorXd& p);
     double calculateCost(Eigen::Vector4d vertex, Eigen::Matrix4d Q);
-    bool collapse_edge();
     
     // Run methods
-    void Init();
-    void createDecimatedMesh();
-    
-    
+    void createDecimatedMesh(std::string fileName);
 };
