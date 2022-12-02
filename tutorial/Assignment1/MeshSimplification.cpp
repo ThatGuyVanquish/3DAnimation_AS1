@@ -1,55 +1,45 @@
 #include "MeshSimplification.h"
 
-MeshSimplification::MeshSimplification(std::string filename, int _decimations):
-    currentMesh(cg3d::IglLoader::MeshFromFiles("Current Mesh", filename)), decimations(_decimations)
+MeshSimplification::MeshSimplification(std::string filename, int _decimations) :
+    currentMesh(cg3d::IglLoader::MeshFromFiles("Current Mesh", filename)),
+    decimations(_decimations),
+    collapseCounter(0)
 {
-    V = currentMesh->data[0].vertices, F = currentMesh->data[0].faces;
-    igl::edge_flaps(F, E, EMAP, EF, EI);
-    Init();
-    createDecimatedMesh();
+    createDecimatedMesh(filename);
 }
+
+/*
+
+    HELPER METHODS
+
+*/
 
 std::shared_ptr<cg3d::Mesh> MeshSimplification::getMesh()
 {
     return currentMesh;
 }
 
-void MeshSimplification::Init()
+Eigen::Vector4d MeshSimplification::ThreeDimVecToFourDim(Eigen::Vector3d vertex)
 {
-    C.resize(E.rows(), V.cols());
-    Eigen::VectorXd costs(E.rows());
-    Q = {};
-    { // Build costs heap
-        calculateQs();
-        Eigen::VectorXd costs(E.rows());
-        igl::parallel_for(E.rows(), [&](const int e)
-            {
-                double cost = e;
-                Eigen::RowVectorXd p(1, 3);
-                //igl::shortest_edge_and_midpoint(e, V, F, E, EMAP, EF, EI, cost, p);
-                quadratic_error_simplification(e, cost, p);
-                C.row(e) = p;
-                costs(e) = cost;
-            }, 10000);
-        for (int e = 0; e < E.rows(); e++)
-        {
-            Q.emplace(costs(e), e);
-        }
-    }
-    for (int i = 0; i < F.rows(); i++)
-    {
-        Eigen::VectorXi currentRowInF = F.row(i);
-        // prepare vertex to face map
-        verticesToFaces.clear();
-        for (int j = 0; j < currentRowInF.cols(); j++)
-        {
-            int vertexId = currentRowInF(j);
-            verticesToFaces[vertexId].push_back(i);
-        }
-    }
+    Eigen::Vector4d newVertex;
+    newVertex[0] = vertex[0], newVertex[1] = vertex[1], newVertex[2] = vertex[2], newVertex[3] = 1;
+    return newVertex;
 }
 
-Eigen::Vector4d MeshSimplification::equation_plane(Eigen::Vector3i triangle, Eigen::MatrixXd& V)
+Eigen::Vector3d MeshSimplification::FourDimVecToThreeDim(Eigen::Vector4d vertex)
+{
+    Eigen::Vector3d newVertex;
+    newVertex[0] = vertex[0], newVertex[1] = vertex[1], newVertex[2] = vertex[2];
+    return newVertex;
+}
+
+/*
+
+    METHODS TO CALCULATE Q MATRICES
+
+*/
+
+Eigen::Vector4d MeshSimplification::planeEquation(Eigen::Vector3i triangle, const Eigen::MatrixXd& V)
 {
     auto x2MinusX1 = V.row(triangle[1]) - V.row(triangle[0]);
     double a1 = x2MinusX1[0];
@@ -69,39 +59,48 @@ Eigen::Vector4d MeshSimplification::equation_plane(Eigen::Vector3i triangle, Eig
     return ret;
 }
 
+Eigen::Vector4d MeshSimplification::calculatePlaneNormal(const Eigen::MatrixXd& V, Eigen::Vector3d threeDimNormal, int vi)
+{
+    Eigen::Vector3d vertex = V.row(vi);
+    double d = -(vertex[0] * threeDimNormal[0] + vertex[1] * threeDimNormal[1] + vertex[2] * threeDimNormal[2]);
+    Eigen::Vector4d planeIn4D = ThreeDimVecToFourDim(threeDimNormal);
+    planeIn4D[3] = d;
+    return planeIn4D;
+}
+
 Eigen::Matrix4d MeshSimplification::calculateKp(Eigen::Vector4d planeVector)
 {
-    std::cout << planeVector * planeVector.transpose() << std::endl;
     return planeVector * planeVector.transpose();
 }
 
-double MeshSimplification::calculateCost(Eigen::Matrix4d QMatrix, Eigen::Vector3d vertex)
+void MeshSimplification::calculateQs(const Eigen::MatrixXd& V, 
+    const Eigen::MatrixXi &F, 
+    Eigen::MatrixXd& faceNormals,
+    std::vector<std::vector<int>>& verticesToFaces,
+    std::vector<std::vector<int>>& facesBeforeIndex,
+    std::vector<Eigen::Matrix4d>& verticesToQ)
 {
-    Eigen::Vector4d convertedPoint;
-    convertedPoint[0] = vertex[0], convertedPoint[1] = vertex[1], convertedPoint[2] = vertex[2], convertedPoint[3] = 1;
-    return convertedPoint.transpose() * QMatrix * convertedPoint;
-}
-
-void MeshSimplification::calculateQs()
-{
-    std::vector <Eigen::Matrix4d> QforVertex(V.rows());
-    for (Eigen::Matrix4d currentMatrix : QforVertex) // set every matrix to the zero matrix
-        currentMatrix = Eigen::Matrix4d::Zero();
-
-    for (int i = 0; i < F.rows(); i++)
+    igl::per_face_normals(V, F, faceNormals); // Re-calculate the normals of all faces
+    igl::vertex_triangle_adjacency(V.rows(), F, verticesToFaces, facesBeforeIndex);
+    for (int i = 0; i < V.rows(); i++)
     {
-        Eigen::VectorXi currentRowInF = F.row(i);
-        auto currentPlaneVector = equation_plane(currentRowInF, V);
-        auto KpForPlaneI = calculateKp(currentPlaneVector);
-
-        for (int j = 0; j < 3; j++)
+        verticesToQ[i] = Eigen::Matrix4d::Zero();
+        for (int j = 0; j < verticesToFaces[i].size(); j++)
         {
-            int currentVertex = currentRowInF[j];
-            QforVertex[currentVertex] += KpForPlaneI;
+            int currentFace = verticesToFaces[i][j];
+            Eigen::Vector3d currentFaceNormal = faceNormals.row(currentFace);
+            Eigen::Vector4d normal = calculatePlaneNormal(V, currentFaceNormal, i);
+            Eigen::Matrix4d Kp = calculateKp(normal);
+            verticesToQ[i] += Kp;
         }
     }
-    verticesToQ = QforVertex;
 }
+
+/*
+    
+    METHODS TO CALCULATE COST AND PLACEMENT
+
+*/
 
 Eigen::Matrix4d MeshSimplification::calculateQDerive(Eigen::Matrix4d currentQ)
 {
@@ -110,184 +109,198 @@ Eigen::Matrix4d MeshSimplification::calculateQDerive(Eigen::Matrix4d currentQ)
     return currentQ;
 }
 
-IGL_INLINE void MeshSimplification::quadratic_error_simplification(
-    const int e,
-    double& cost,
-    Eigen::RowVectorXd& p)
+double MeshSimplification::calculateCost(Eigen::Vector4d vertex, Eigen::Matrix4d Q)
 {
-    // Calculate p
-    int vertex1 = E(e, 0), vertex2 = E(e, 1);
-    Eigen::Matrix4d Q1 = verticesToQ[vertex1], Q2 = verticesToQ[vertex2], Qtag = Q1 + Q2;
-    Eigen::Matrix4d derivedQtag = calculateQDerive(Qtag);
-    Eigen::Matrix4d derivedQtagInverse;
-    bool invertible = false;
-    double determinant;
-    derivedQtag.computeInverseAndDetWithCheck(derivedQtagInverse, determinant, invertible);
-    Eigen::Vector4d vtag;
-    Eigen::Vector4d v0001;
-    v0001[0] = 0, v0001[1] = 0, v0001[2] = 0, v0001[3] = 1;
-    if (!invertible)
-    {
-        Eigen::Vector4d v1 = V.row(vertex1), v2 = V.row(vertex2), v3 = (v1 + v2) / 2;
-        double costV1 = v1.transpose() * Qtag * v1, costV2 = v2.transpose() * Qtag * v2, costV3 = v3.transpose() * Qtag * v3;
-        vtag = costV1 <= costV2 ?
-            (costV1 <= costV3 ? v1 : v3) :
-            costV2 <= costV3 ? v2 : v3;
-    }
-    else
-    {
-        vtag = derivedQtagInverse * v0001;
-    }
-    p = vtag;
-    cost = vtag.transpose() * Qtag * vtag;
+    double cost = vertex.transpose() * Q * vertex;
+    return cost;
 }
 
-bool MeshSimplification::collapse_edge()
-{   
-    int e; // address of edge to collapse
-
-    // a. takes out the lowest cost edge from queue
-    if (Q.empty())
+void MeshSimplification::preCalculateCostAndPos(
+    const igl::decimate_cost_and_placement_callback& callback,
+    const Eigen::MatrixXd &V,
+    const Eigen::MatrixXi &F,
+    const Eigen::MatrixXi &E,
+    const Eigen::VectorXi &EMAP,
+    const Eigen::MatrixXi &EF,
+    const Eigen::MatrixXi &EI,
+    igl::min_heap<std::tuple<double, int, int>>& Q,
+    Eigen::VectorXi& EQ,
+    Eigen::MatrixXd& C
+)
+{
+    C.resize(E.rows(), V.cols());
+    Q = {};
+    EQ = Eigen::VectorXi::Zero(E.rows());
     {
-        e = -1;
-        return false;
+        Eigen::VectorXd costs(E.rows());
+        igl::parallel_for(E.rows(), [&](const int e)
+            {
+                double cost = e;
+                Eigen::RowVectorXd p(1, 3);
+                callback(e, V, F, E, EMAP, EF, EI, cost, p);
+                C.row(e) = p;
+                costs(e) = cost;
+            }, 10000);
+        for (int e = 0; e < E.rows(); e++)
+        {
+            Q.emplace(costs(e), e, 0);
+        }
     }
-
-    std::tuple<double, int> currentEdge = Q.top();
-    if (std::get<0>(currentEdge) == std::numeric_limits<double>::infinity())
-    {
-        e = -1;
-        // min cost edge is infinite cost
-        return false;
-    }
-    else e = std::get<1>(currentEdge);
-    Q.pop();
-    const Eigen::RowVectorXd p = C.row(e);
-    igl::collapse_edge(
-        e,
-        p,
-        V,
-        F,
-        E,
-        EMAP,
-        EF,
-        EI
-    );
-    std::cout << "edge " << e << ", cost = " << std::get<0>(currentEdge) <<
-        ", new v position (" << p(0) << ", " << p(1) << ", " << p(2) << ")" << std::endl;
-
-    //// b. add the new vertex into V
-    //int v1 = E(e, 0), v2 = E(e, 1);
-    ////double cost;
-    //Eigen::RowVectorXd p = C.row(e);
-    ////quadratic_error_simplification(e, cost, p);
-    //
-    //// new shit
-    ///*V.conservativeResize(V.rows() + 1, V.cols());
-    //int newVertexIndex = V.rows() - 1;
-    //V.row(newVertexIndex) = p;*/
-    //V.row(v1) = p, V.row(v2) = p;
-    //
-    //// c. remove old vertices from V, F so we could call edge_flaps to rebuild E, EF, EI, EMAP
-    //F.row(EF(e, 0)) = Eigen::Vector3i(0, 0, 0);
-    //F.row(EF(e, 1)) = Eigen::Vector3i(0, 0, 0);
-    //std::vector<int> facesOfV1 = verticesToFaces[v1];
-    //// new
-    //std::vector<int> facesForV2;
-    //// idea - instead of adding a new vertex, we set the values of
-    //// the faces of v1 and v2 to be the same and remove the faces we removed, 
-    //// making them in theory the same vertex
-    //for (int i = 0; i < facesOfV1.size(); i++)
-    //{
-    //    if (facesOfV1[i] == EF(e, 0) || facesOfV1[i] == EF(e, 1))
-    //    {
-    //        facesOfV1.erase(facesOfV1.begin() + i); // concurrent modification?
-    //        i--;
-    //    }
-    //    /*verticesToFaces[newVertexIndex].push_back(face);
-    //    for (int i = 0; i < 3; i++)
-    //        if (F(face, i) == v1)
-    //            F(face, i) = newVertexIndex;*/
-    //    // new
-    //    facesForV2.push_back(facesOfV1[i]);
-    //}
-    //std::vector<int> facesOfV2 = verticesToFaces[v2];
-    //std::vector<int> facesForV1;
-    //for (int i = 0; i < facesOfV2.size(); i++)
-    //{
-    //    if (facesOfV2[i] == EF(e, 0) || facesOfV2[i] == EF(e, 1))
-    //    {
-    //        facesOfV2.erase(facesOfV2.begin() + i); // concurrent modification?
-    //        i--;
-    //    }
-    //    /*verticesToFaces[newVertexIndex].push_back(face);
-    //    for (int i = 0; i < 3; i++)
-    //        if (F(face, i) == v2)
-    //            F(face, i) = newVertexIndex;*/
-    //    facesForV1.push_back(facesOfV2[i]);
-    //}
-    //for (int face : facesForV2)
-    //    facesOfV2.push_back(face);
-    //for (int face : facesForV1)
-    //    facesOfV1.push_back(face);
-
-    ////verticesToFaces.erase(v1);
-    ////verticesToFaces.erase(v2);
-    //igl::edge_flaps(F, E, EMAP, EF, EI);
-
-    return true;
 }
 
-void MeshSimplification::createDecimatedMesh()
+void MeshSimplification::createDecimatedMesh(std::string fileName)
 {
+    Eigen::MatrixXd V;
+    Eigen::MatrixXi F;
+    igl::read_triangle_mesh(fileName, V, F);
+    std::vector<Eigen::Matrix4d> verticesToQ(V.rows());
+    Eigen::MatrixXi E;
+    Eigen::VectorXi EMAP;
+    Eigen::MatrixXi EF;
+    Eigen::MatrixXi EI;
+    igl::edge_flaps(F, E, EMAP, EF, EI);
+
+    Eigen::MatrixXd faceNormals;
+    std::vector<std::vector<int>> verticesToFaces;
+    std::vector<std::vector<int>> facesBeforeIndex;
+
+    calculateQs(V, F, faceNormals, verticesToFaces, facesBeforeIndex, verticesToQ);
+
+    auto calculateCostAndPos = [&](
+        const int e,
+        const Eigen::MatrixXd& V,
+        const Eigen::MatrixXi&/*F*/,
+        const Eigen::MatrixXi& E,
+        const Eigen::VectorXi&/*EMAP*/,
+        const Eigen::MatrixXi&/*EF*/,
+        const Eigen::MatrixXi&/*EI*/,
+        double& cost,
+        Eigen::RowVectorXd& p
+        )
+    {
+        // Calculate the point p, the coordinates of the combined vertices
+        int vertex1 = E(e, 0), vertex2 = E(e, 1);
+        Eigen::Matrix4d Q1 = verticesToQ[vertex1], Q2 = verticesToQ[vertex2], Qtag = Q1 + Q2;
+
+        Eigen::Matrix4d derivedQtag = calculateQDerive(Qtag); // Deriviated Q, 4th row is 0,0,0,1
+
+        // Try to calculate Q' inverse, if possible the new point is ((Q')^-1) * Transpose(0,0,0,1)
+        Eigen::Matrix4d derivedQtagInverse;
+        bool invertible = false;
+        double determinant;
+        derivedQtag.computeInverseAndDetWithCheck(derivedQtagInverse, determinant, invertible);
+        Eigen::Vector4d vtag;
+        Eigen::Vector4d v0001;
+        v0001[0] = 0, v0001[1] = 0, v0001[2] = 0, v0001[3] = 1;
+        /*
+            If Q' isn't invertible calculate the coordinates of the new vertex p by
+            the minimum cost between the vertx v1, the vertex v2 and the middle of the edge e=(v1,v2), denoted by v3
+        */
+        if (!invertible)
+        {
+            Eigen::Vector4d v1 = ThreeDimVecToFourDim(V.row(vertex1)), v2 = ThreeDimVecToFourDim(V.row(vertex2));
+            Eigen::Vector4d v3 = (v1 + v2) / 2;
+
+            double costV1 = calculateCost(v1, Qtag), costV2 = calculateCost(v2, Qtag), costV3 = calculateCost(v3, Qtag);
+            vtag = costV1 <= costV2 ?
+                (costV1 <= costV3 ? v1 : v3) : // costV1 <= costV3 <= costV2, otherwise costV3 < costV1 <= costV2
+                costV2 <= costV3 ? v2 : v3;    // costV2 <= costV1 <= costV3, otherwise costV3 < costV2 <= costV1
+        }
+        else
+        {
+            vtag = derivedQtagInverse * v0001;
+        }
+        p = FourDimVecToThreeDim(vtag);
+        //p = (V.row(vertex1) + V.row(vertex2)) / 2;
+        cost = calculateCost(vtag, Qtag);
+    };
+
+    igl::min_heap<std::tuple<double, int, int>> Q;
+    Eigen::VectorXi EQ;
+    Eigen::MatrixXd C;
+
+    preCalculateCostAndPos(calculateCostAndPos, V, F, E, EMAP, EF, EI, Q, EQ, C);
+
+    auto preCollapse = [&](
+        const Eigen::MatrixXd& V,
+        const Eigen::MatrixXi&/*F*/,
+        const Eigen::MatrixXi&/*E*/,
+        const Eigen::VectorXi&/*EMAP*/,
+        const Eigen::MatrixXi&/*EF*/,
+        const Eigen::MatrixXi&/*EI*/,
+        const igl::min_heap<std::tuple<double, int, int>> /*Q*/,
+        const Eigen::VectorXi /*EQ*/,
+        const Eigen::MatrixXd&/*C*/,
+        const int e
+        )
+    {
+        return true;
+    };
+
+    auto postCollapse = [&](
+        const Eigen::MatrixXd& V, 
+        const Eigen::MatrixXi&/*F*/,
+        const Eigen::MatrixXi &/*E*/,
+        const Eigen::VectorXi &/*EMAP*/,
+        const Eigen::MatrixXi &/*EF*/,
+        const Eigen::MatrixXi &/*EI*/,
+        const igl::min_heap<std::tuple<double,int,int>> /*Q*/, 
+        const Eigen::VectorXi /*EQ*/, 
+        const Eigen::MatrixXd &/*C*/, 
+        const int e, 
+        const int e1, 
+        const int e2, 
+        const int f1, 
+        const int f2, 
+        const bool collapsed
+        )
+    {
+        if (collapsed)
+        {
+            int v1 = E(e, 0), v2 = E(e, 1);
+            verticesToQ[v1] += verticesToQ[v2];
+            verticesToQ[v2] = verticesToQ[v1];
+        }
+    };
+
+    int currentNumOfEdges = E.rows();
+    int counter = 0;
+    int recalc = 0;
     for (int i = 0; i < decimations; i++)
     {
         int collapsed_edges = 0;
-        const int max_iter = std::ceil(0.1 * Q.size());
-        const int heapResetInterval = max_iter / 10;
+        const int max_iter = (std::ceil(0.1 * currentNumOfEdges));
         for (int j = 0; j < max_iter; j++)
         {
-            if (!collapse_edge())
+            if (counter == 10)
+            {
+                calculateQs(V, F, faceNormals, verticesToFaces, facesBeforeIndex, verticesToQ);
+                recalc++;
+                counter = 0;
+            }
+            std::tuple<double, int, int> currentTop = Q.top();
+            if (!igl::collapse_edge(calculateCostAndPos, preCollapse, postCollapse, V, F, E, EMAP, EF, EI, Q, EQ, C))
             {
                 break;
             }
-            collapsed_edges++;
-            if (j % heapResetInterval == 0)
-            {
-                std::cout << "for testing purposes: " << j << std::endl;
-                Init(); // resets the cost heap and C matrix of new vertex positions
-            }
+            counter++;
+            collapsed_edges += 3;
+            collapseCounter += 3;
+            int e = std::get<1>(currentTop);
+            int v1 = E(e, 0), v2 = E(e, 1);
+
+            std::cout << "Edge: " << e << ", Cost = " << std::get<0>(currentTop) << ", New position: ("
+                << C.row(e) << ")" << std::endl;
         }
         if (collapsed_edges > 0)
         {
+            currentNumOfEdges -= collapsed_edges;
             currentMesh->data.push_back(
                 { V, F, currentMesh->data[0].vertexNormals, currentMesh->data[0].textureCoords }
             );
         }
     }
+    std::cout << "Initial Number of edges: " << E.rows() << std::endl;
+    std::cout << "Collapsed edges: " << collapseCounter << std::endl;
+    std::cout << "Qs were recalculated " << recalc << " times" << std::endl;
 }
-
-//int main() {
-//    auto currentMesh{ cg3d::IglLoader::MeshFromFiles("cyl_igl", "data/cube.off")};
-//    Eigen::MatrixXd V, OV;
-//    Eigen::MatrixXi F, OF;
-//
-//    igl::read_triangle_mesh("data/cube.off", OV, OF);
-//    // Prepare array-based edge data structures and priority queue
-//    Eigen::VectorXi EMAP;
-//    Eigen::MatrixXi E, EF, EI;
-//    igl::min_heap< std::tuple<double, int, int>> Q;
-//    // If an edge were collapsed, we'd collapse it to these points:
-//    Eigen::MatrixXd C;
-//    F = OV;
-//    V = OF;
-//    igl::edge_flaps(F, E, EMAP, EF, EI);
-//
-//    std::cout << "EMAP:\n*********************\n" << EMAP << "\n*********************\n" << std::endl;
-//    std::cout << "E:\n*********************\n" << E << "\n*********************\n" << std::endl;
-//    std::cout << "EF:\n*********************\n" << EF << "\n*********************\n" << std::endl;
-//    std::cout << "EI:\n*********************\n" << EI << "\n*********************\n" << std::endl;
-//    std::cout << "V:" << V << std::endl;
-//    std::cout << "F:\n*********************\n" << F << "\n*********************\n" << std::endl;
-//    return 0;
-//}

@@ -1,30 +1,27 @@
 #pragma once
 
-#include "Scene.h"
-
-#include "AutoMorphingModel.h"
 #include <utility>
-#include "ObjLoader.h"
 #include "IglMeshLoader.h"
 #include "igl_inline.h"
-#include <igl/circulation.h>
 #include <igl/collapse_edge.h>
 #include <igl/edge_flaps.h>
-#include <igl/decimate.h>
-#include <igl/shortest_edge_and_midpoint.h>
 #include <igl/parallel_for.h>
 #include <igl/read_triangle_mesh.h>
-#include <igl/opengl/glfw/Viewer.h>
+#include <igl/circulation.h>
 #include <Eigen/Core>
 #include <iostream>
-#include <set>
 #include "../engine/Mesh.h"
 #include <Eigen/LU> 
+#include <map>
+#include <igl/per_face_normals.h>
+#include <igl/vertex_triangle_adjacency.h>
+#include <numeric>
+#include <cmath>
 
 /*
 
     Mesh Simplification object holds a simplified mesh object
-    with 
+    with
 
 */
 class MeshSimplification
@@ -36,24 +33,39 @@ public:
 private:
     std::shared_ptr<cg3d::Mesh> currentMesh;
     int decimations;
-    Eigen::MatrixXd V;
-    Eigen::MatrixXi F;
-    Eigen::MatrixXi E;
-    Eigen::VectorXi EMAP;
-    Eigen::MatrixXi EF;
-    Eigen::MatrixXi EI;
-    igl::min_heap<std::tuple<double, int>> Q;
-    Eigen::MatrixXd C;
-    std::vector<Eigen::Matrix4d> verticesToQ;
-    std::map<int, std::vector<int>> verticesToFaces;
+    int collapseCounter;
+    
+    // HELPER METHODS
+    Eigen::Vector4d ThreeDimVecToFourDim(Eigen::Vector3d vertex);
+    Eigen::Vector3d FourDimVecToThreeDim(Eigen::Vector4d vertex);
 
-    void Init();
-    void createDecimatedMesh();
-    Eigen::Vector4d equation_plane(Eigen::Vector3i triangle, Eigen::MatrixXd& V);
+    // METHODS TO CALCULATE Q MATRICES
+    Eigen::Vector4d planeEquation(Eigen::Vector3i triangle, const Eigen::MatrixXd& V);
+    Eigen::Vector4d calculatePlaneNormal(const Eigen::MatrixXd& V, Eigen::Vector3d threeDimNormal, int vi);
     Eigen::Matrix4d calculateKp(Eigen::Vector4d planeVector);
-    void calculateQs();
-    double calculateCost(Eigen::Matrix4d QMatrix, Eigen::Vector3d vertex);
+    void calculateQs(const Eigen::MatrixXd& V, 
+        const Eigen::MatrixXi &F, 
+        Eigen::MatrixXd& faceNormals,
+        std::vector<std::vector<int>> &verticesToFaces,
+        std::vector<std::vector<int>> &facesBeforeIndex,
+        std::vector<Eigen::Matrix4d> &verticesToQ);
+
+    // METHODS TO CALCULATE COST AND PLACEMENT
     Eigen::Matrix4d calculateQDerive(Eigen::Matrix4d currentQ);
-    void quadratic_error_simplification(const int e, double& cost, Eigen::RowVectorXd& p);
-    bool collapse_edge();
+    double calculateCost(Eigen::Vector4d vertex, Eigen::Matrix4d Q);
+    void preCalculateCostAndPos(
+        const igl::decimate_cost_and_placement_callback& callback,
+        const Eigen::MatrixXd& V,
+        const Eigen::MatrixXi& F,
+        const Eigen::MatrixXi& E,
+        const Eigen::VectorXi& EMAP,
+        const Eigen::MatrixXi& EF,
+        const Eigen::MatrixXi& EI,
+        igl::min_heap<std::tuple<double, int, int>>& Q,
+        Eigen::VectorXi& EQ,
+        Eigen::MatrixXd& C
+    );
+    
+    // RUN METHODS
+    void createDecimatedMesh(std::string fileName);
 };
