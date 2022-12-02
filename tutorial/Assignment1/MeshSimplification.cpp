@@ -3,8 +3,7 @@
 MeshSimplification::MeshSimplification(std::string filename, int _decimations) :
     currentMesh(cg3d::IglLoader::MeshFromFiles("Current Mesh", filename)),
     decimations(_decimations),
-    collapseCounter(0),
-    QResetInterval(0)
+    collapseCounter(0)
 {
     createDecimatedMesh(filename);
 }
@@ -40,28 +39,27 @@ Eigen::Vector3d MeshSimplification::FourDimVecToThreeDim(Eigen::Vector4d vertex)
 
 */
 
-Eigen::Matrix4d MeshSimplification::calculateQDerive(Eigen::Matrix4d currentQ)
+Eigen::Vector4d MeshSimplification::planeEquation(Eigen::Vector3i triangle, const Eigen::MatrixXd& V)
 {
-    auto lastRow = currentQ.row(3);
-    lastRow[0] = 0, lastRow[1] = 0, lastRow[2] = 0, lastRow[3] = 1;
-    return currentQ;
+    auto x2MinusX1 = V.row(triangle[1]) - V.row(triangle[0]);
+    double a1 = x2MinusX1[0];
+    double b1 = x2MinusX1[1];
+    double c1 = x2MinusX1[2];
+    auto x3MinusX1 = V.row(triangle[2]) - V.row(triangle[0]);
+    double a2 = x3MinusX1[0];
+    double b2 = x3MinusX1[1];
+    double c2 = x3MinusX1[2];
+    double a = b1 * c2 - b2 * c1;
+    double b = a2 * c1 - a1 * c2;
+    double c = a1 * b2 - b1 * a2;
+    double d = (-a * V.row(triangle[0])[0] - b * V.row(triangle[0])[1] - c * V.row(triangle[0])[2]);
+    double normalizer = sqrt(pow(a, 2) + pow(b, 2) + pow(c, 2));
+    Eigen::Vector4d ret;
+    ret(0) = a / normalizer, ret(1) = b / normalizer, ret(2) = c / normalizer, ret(3) = d / normalizer;
+    return ret;
 }
 
-
-Eigen::Matrix4d MeshSimplification::calculateKp(Eigen::Vector4d planeVector)
-{
-    return planeVector * planeVector.transpose();
-}
-
-
-double MeshSimplification::calculateCost(Eigen::Vector4d vertex, Eigen::Matrix4d Q)
-{
-    double cost = vertex.transpose() * Q * vertex;
-    return cost;
-}
-
-
-Eigen::Vector4d MeshSimplification::calculatePlaneNormal(const Eigen::MatrixXd &V, Eigen::Vector3d threeDimNormal, int vi)
+Eigen::Vector4d MeshSimplification::calculatePlaneNormal(const Eigen::MatrixXd& V, Eigen::Vector3d threeDimNormal, int vi)
 {
     Eigen::Vector3d vertex = V.row(vi);
     double d = -(vertex[0] * threeDimNormal[0] + vertex[1] * threeDimNormal[1] + vertex[2] * threeDimNormal[2]);
@@ -70,43 +68,103 @@ Eigen::Vector4d MeshSimplification::calculatePlaneNormal(const Eigen::MatrixXd &
     return planeIn4D;
 }
 
+Eigen::Matrix4d MeshSimplification::calculateKp(Eigen::Vector4d planeVector)
+{
+    return planeVector * planeVector.transpose();
+}
+
+void MeshSimplification::calculateQs(const Eigen::MatrixXd& V, 
+    const Eigen::MatrixXi &F, 
+    Eigen::MatrixXd& faceNormals,
+    std::vector<std::vector<int>>& verticesToFaces,
+    std::vector<std::vector<int>>& facesBeforeIndex,
+    std::vector<Eigen::Matrix4d>& verticesToQ)
+{
+    igl::per_face_normals(V, F, faceNormals); // Re-calculate the normals of all faces
+    igl::vertex_triangle_adjacency(V.rows(), F, verticesToFaces, facesBeforeIndex);
+    for (int i = 0; i < V.rows(); i++)
+    {
+        verticesToQ[i] = Eigen::Matrix4d::Zero();
+        for (int j = 0; j < verticesToFaces[i].size(); j++)
+        {
+            int currentFace = verticesToFaces[i][j];
+            Eigen::Vector3d currentFaceNormal = faceNormals.row(currentFace);
+            Eigen::Vector4d normal = calculatePlaneNormal(V, currentFaceNormal, i);
+            Eigen::Matrix4d Kp = calculateKp(normal);
+            verticesToQ[i] += Kp;
+        }
+    }
+}
+
+/*
+    
+    METHODS TO CALCULATE COST AND PLACEMENT
+
+*/
+
+Eigen::Matrix4d MeshSimplification::calculateQDerive(Eigen::Matrix4d currentQ)
+{
+    auto lastRow = currentQ.row(3);
+    lastRow[0] = 0, lastRow[1] = 0, lastRow[2] = 0, lastRow[3] = 1;
+    return currentQ;
+}
+
+double MeshSimplification::calculateCost(Eigen::Vector4d vertex, Eigen::Matrix4d Q)
+{
+    double cost = vertex.transpose() * Q * vertex;
+    return cost;
+}
+
+void MeshSimplification::preCalculateCostAndPos(
+    const igl::decimate_cost_and_placement_callback& callback,
+    const Eigen::MatrixXd &V,
+    const Eigen::MatrixXi &F,
+    const Eigen::MatrixXi &E,
+    const Eigen::VectorXi &EMAP,
+    const Eigen::MatrixXi &EF,
+    const Eigen::MatrixXi &EI,
+    igl::min_heap<std::tuple<double, int, int>>& Q,
+    Eigen::VectorXi& EQ,
+    Eigen::MatrixXd& C
+)
+{
+    C.resize(E.rows(), V.cols());
+    Q = {};
+    EQ = Eigen::VectorXi::Zero(E.rows());
+    {
+        Eigen::VectorXd costs(E.rows());
+        igl::parallel_for(E.rows(), [&](const int e)
+            {
+                double cost = e;
+                Eigen::RowVectorXd p(1, 3);
+                callback(e, V, F, E, EMAP, EF, EI, cost, p);
+                C.row(e) = p;
+                costs(e) = cost;
+            }, 10000);
+        for (int e = 0; e < E.rows(); e++)
+        {
+            Q.emplace(costs(e), e, 0);
+        }
+    }
+}
+
 void MeshSimplification::createDecimatedMesh(std::string fileName)
 {
-    std::vector<Eigen::Matrix4d> verticesToQ;
     Eigen::MatrixXd V;
     Eigen::MatrixXi F;
     igl::read_triangle_mesh(fileName, V, F);
+    std::vector<Eigen::Matrix4d> verticesToQ(V.rows());
     Eigen::MatrixXi E;
     Eigen::VectorXi EMAP;
     Eigen::MatrixXi EF;
     Eigen::MatrixXi EI;
     igl::edge_flaps(F, E, EMAP, EF, EI);
 
-    auto calculateQs = [&](
-        const Eigen::MatrixXd& V,
-        const Eigen::MatrixXi&/*F*/
-        )
-    {
-        Eigen::MatrixXd faceNormals;
-        std::vector<std::vector<int>> verticesToFaces;
-        std::vector<std::vector<int>> facesBeforeIndex;
-        igl::per_face_normals(V, F, faceNormals); // Re-calculate the normals of all faces
-        igl::vertex_triangle_adjacency(V.rows(), F, verticesToFaces, facesBeforeIndex);
-        for (int i = 0; i < V.rows(); i++)
-        {
-            verticesToQ[i] = Eigen::Matrix4d::Zero();
-            for (int j = 0; j < verticesToFaces[i].size(); j++)
-            {
-                int currentFace = verticesToFaces[i][j];
-                Eigen::Vector3d currentFaceNormal = faceNormals.row(currentFace);
-                Eigen::Vector4d normal = calculatePlaneNormal(V, currentFaceNormal, i);
-                Eigen::Matrix4d Kp = calculateKp(normal);
-                verticesToQ[i] += Kp;
-            }
-        }
-    };
+    Eigen::MatrixXd faceNormals;
+    std::vector<std::vector<int>> verticesToFaces;
+    std::vector<std::vector<int>> facesBeforeIndex;
 
-    calculateQs(V, F);
+    calculateQs(V, F, faceNormals, verticesToFaces, facesBeforeIndex, verticesToQ);
 
     auto calculateCostAndPos = [&](
         const int e,
@@ -161,50 +219,79 @@ void MeshSimplification::createDecimatedMesh(std::string fileName)
     Eigen::VectorXi EQ;
     Eigen::MatrixXd C;
 
-    const auto& reset = [&]()
+    preCalculateCostAndPos(calculateCostAndPos, V, F, E, EMAP, EF, EI, Q, EQ, C);
+
+    auto preCollapse = [&](
+        const Eigen::MatrixXd& V,
+        const Eigen::MatrixXi&/*F*/,
+        const Eigen::MatrixXi&/*E*/,
+        const Eigen::VectorXi&/*EMAP*/,
+        const Eigen::MatrixXi&/*EF*/,
+        const Eigen::MatrixXi&/*EI*/,
+        const igl::min_heap<std::tuple<double, int, int>> /*Q*/,
+        const Eigen::VectorXi /*EQ*/,
+        const Eigen::MatrixXd&/*C*/,
+        const int e
+        )
     {
-        C.resize(E.rows(), V.cols());
-        Q = {};
-        EQ = Eigen::VectorXi::Zero(E.rows());
+        return true;
+    };
+
+    auto postCollapse = [&](
+        const Eigen::MatrixXd& V, 
+        const Eigen::MatrixXi&/*F*/,
+        const Eigen::MatrixXi &/*E*/,
+        const Eigen::VectorXi &/*EMAP*/,
+        const Eigen::MatrixXi &/*EF*/,
+        const Eigen::MatrixXi &/*EI*/,
+        const igl::min_heap<std::tuple<double,int,int>> /*Q*/, 
+        const Eigen::VectorXi /*EQ*/, 
+        const Eigen::MatrixXd &/*C*/, 
+        const int e, 
+        const int e1, 
+        const int e2, 
+        const int f1, 
+        const int f2, 
+        const bool collapsed
+        )
+    {
+        if (collapsed)
         {
-            Eigen::VectorXd costs(E.rows());
-            igl::parallel_for(E.rows(), [&](const int e)
-                {
-                    double cost = e;
-                    Eigen::RowVectorXd p(1, 3);
-                    calculateCostAndPos(e, V, F, E, EMAP, EF, EI, cost, p);
-                    C.row(e) = p;
-                    costs(e) = cost;
-                }, 10000);
-            for (int e = 0; e < E.rows(); e++)
-            {
-                Q.emplace(costs(e), e, 0);
-            }
+            int v1 = E(e, 0), v2 = E(e, 1);
+            verticesToQ[v1] += verticesToQ[v2];
+            verticesToQ[v2] = verticesToQ[v1];
         }
     };
 
-    reset();
-
     int currentNumOfEdges = E.rows();
+    int counter = 0;
+    int recalc = 0;
     for (int i = 0; i < decimations; i++)
     {
         int collapsed_edges = 0;
         const int max_iter = (std::ceil(0.1 * currentNumOfEdges));
-        QResetInterval = 1;
         for (int j = 0; j < max_iter; j++)
         {
+            if (counter == 10)
+            {
+                calculateQs(V, F, faceNormals, verticesToFaces, facesBeforeIndex, verticesToQ);
+                recalc++;
+                counter = 0;
+            }
             std::tuple<double, int, int> currentTop = Q.top();
-            if (!igl::collapse_edge(calculateCostAndPos, V, F, E, EMAP, EF, EI, Q, EQ, C))
+            if (!igl::collapse_edge(calculateCostAndPos, preCollapse, postCollapse, V, F, E, EMAP, EF, EI, Q, EQ, C))
             {
                 break;
             }
+            counter++;
             collapsed_edges += 3;
             collapseCounter += 3;
             int e = std::get<1>(currentTop);
+            int v1 = E(e, 0), v2 = E(e, 1);
+
             std::cout << "Edge: " << e << ", Cost = " << std::get<0>(currentTop) << ", New position: ("
                 << C.row(e) << ")" << std::endl;
         }
-        //std::cout << "Collapsed edges: " << collapsed_edges << std::endl;
         if (collapsed_edges > 0)
         {
             currentNumOfEdges -= collapsed_edges;
@@ -215,4 +302,5 @@ void MeshSimplification::createDecimatedMesh(std::string fileName)
     }
     std::cout << "Initial Number of edges: " << E.rows() << std::endl;
     std::cout << "Collapsed edges: " << collapseCounter << std::endl;
+    std::cout << "Qs were recalculated " << recalc << " times" << std::endl;
 }

@@ -18,10 +18,13 @@ void BasicScene::Init(float fov, int width, int height, float near, float far)
     auto program = std::make_shared<Program>("shaders/basicShader");
     auto material{ std::make_shared<Material>("material", program)}; // empty material
     material->AddTexture(0, "textures/box0.bmp", 2);
-    std::string objFile = "data/bunny.off";
-    //std::string objFile = "data/sphere.obj";
+    std::vector<std::string> objFiles{ "data/bunny.off", /* 0 */
+        "data/sphere.obj", /* 1 */
+        "data/cheburashka.off", /* 2 */
+        "data/fertility.off" /* 3 */};
+    int objIndex = 3;
     int decimations = 10;
-    myMeshObj = std::make_shared<MeshSimplification>(MeshSimplification(objFile, decimations));
+    myMeshObj = std::make_shared<MeshSimplification>(MeshSimplification(objFiles[objIndex], decimations));
     auto morphFunc = [](Model* model, cg3d::Visitor* visitor) {
         return model->meshIndex;
     };
@@ -30,14 +33,38 @@ void BasicScene::Init(float fov, int width, int height, float near, float far)
         *cg3d::Model::Create("My Model", myMeshObj->getMesh(), material),
         morphFunc
     );
+    float cameraTranslate = 0;
     
-    //autoCamel->Translate({ 1,-3,0 });
-    myAutoModel->Translate({ 1,-3,0 });
-    //autoCamel->Scale(30.0f);
-    myAutoModel->Scale(4.0f);
+    switch (objIndex)
+    {
+    case 0: /* Bunny */
+        myAutoModel->Scale(40.0f);
+        myAutoModel->Translate({ 1,-4,0 });
+        cameraTranslate = 10;
+        break;
+    case 1: /* Sphere */
+        myAutoModel->Scale(5.0f);
+        myAutoModel->Translate({ 0,0,0 });
+        cameraTranslate = 10;
+        break;
+    case 2: /* Cheburashka */
+        myAutoModel->Scale(25.0f);
+        myAutoModel->Translate({ -12.45,-12,0 });
+        cameraTranslate = 40;
+        break;
+    case 3: /* Fertility */
+        myAutoModel->Scale(0.156f);
+        myAutoModel->Translate({ -3.5,0,0 });
+        cameraTranslate = 40;
+        break;
+    default: 
+        myAutoModel->Scale(3.0f);
+        myAutoModel->Translate({ 0,0,0 });
+        cameraTranslate = 10;
+    }
     myAutoModel->showWireframe = true;
     root->AddChild(myAutoModel);
-    camera->Translate(10, Axis::Z);
+    camera->Translate(cameraTranslate, Axis::Z);
 }
 
 void BasicScene::Update(const Program& program, const Eigen::Matrix4f& proj, const Eigen::Matrix4f& view, const Eigen::Matrix4f& model)
