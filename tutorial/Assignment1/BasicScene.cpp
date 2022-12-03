@@ -22,9 +22,10 @@ void BasicScene::Init(float fov, int width, int height, float near, float far)
         "data/sphere.obj", /* 1 */
         "data/cheburashka.off", /* 2 */
         "data/fertility.off" /* 3 */};
-    int objIndex = 3;
+    int objIndex = 1;
     int decimations = 10;
-    myMeshObj = std::make_shared<MeshSimplification>(MeshSimplification(objFiles[objIndex], decimations));
+    int recalcQsRate = 1;
+    myMeshObj = std::make_shared<MeshSimplification>(MeshSimplification(objFiles[objIndex], decimations, recalcQsRate));
     auto morphFunc = [](Model* model, cg3d::Visitor* visitor) {
         return model->meshIndex;
     };

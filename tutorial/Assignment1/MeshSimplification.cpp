@@ -1,9 +1,10 @@
 #include "MeshSimplification.h"
 
-MeshSimplification::MeshSimplification(std::string filename, int _decimations) :
+MeshSimplification::MeshSimplification(std::string filename, int _decimations, const int _recalcQsRate) :
     currentMesh(cg3d::IglLoader::MeshFromFiles("Current Mesh", filename)),
     decimations(_decimations),
-    collapseCounter(0)
+    collapseCounter(0),
+    recalcQsRate(_recalcQsRate)
 {
     createDecimatedMesh(filename);
 }
@@ -272,7 +273,7 @@ void MeshSimplification::createDecimatedMesh(std::string fileName)
         const int max_iter = (std::ceil(0.1 * currentNumOfEdges));
         for (int j = 0; j < max_iter; j++)
         {
-            if (counter == 10)
+            if (counter == recalcQsRate)
             {
                 calculateQs(V, F, faceNormals, verticesToFaces, facesBeforeIndex, verticesToQ);
                 recalc++;
@@ -285,7 +286,6 @@ void MeshSimplification::createDecimatedMesh(std::string fileName)
             }
             counter++;
             collapsed_edges += 3;
-            collapseCounter += 3;
             int e = std::get<1>(currentTop);
             int v1 = E(e, 0), v2 = E(e, 1);
 
@@ -294,6 +294,7 @@ void MeshSimplification::createDecimatedMesh(std::string fileName)
         }
         if (collapsed_edges > 0)
         {
+            collapseCounter += collapsed_edges;
             currentNumOfEdges -= collapsed_edges;
             currentMesh->data.push_back(
                 { V, F, currentMesh->data[0].vertexNormals, currentMesh->data[0].textureCoords }

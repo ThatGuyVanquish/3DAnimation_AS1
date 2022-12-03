@@ -27,13 +27,14 @@
 class MeshSimplification
 {
 public:
-    MeshSimplification(std::string filename, int _decimations);
+    MeshSimplification(std::string filename, int _decimations, const int recalcQsRate);
     std::shared_ptr<cg3d::Mesh> getMesh();
 
 private:
     std::shared_ptr<cg3d::Mesh> currentMesh;
     int decimations;
     int collapseCounter;
+    const int recalcQsRate;
     
     // HELPER METHODS
     Eigen::Vector4d ThreeDimVecToFourDim(Eigen::Vector3d vertex);
