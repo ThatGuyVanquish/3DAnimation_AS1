@@ -1,5 +1,5 @@
 #include "BasicScene.h"
-
+#include <chrono>
 using namespace cg3d;
 
 void BasicScene::Init(float fov, int width, int height, float near, float far)
@@ -22,10 +22,13 @@ void BasicScene::Init(float fov, int width, int height, float near, float far)
         "data/sphere.obj", /* 1 */
         "data/cheburashka.off", /* 2 */
         "data/fertility.off" /* 3 */};
-    int objIndex = 1;
-    int decimations = 10;
-    int recalcQsRate = 1;
+    int objIndex = 2;
+    int decimations = 7;
+    int recalcQsRate = 10;
+    std::chrono::time_point<std::chrono::steady_clock> m_StartTime = std::chrono::high_resolution_clock::now();
     myMeshObj = std::make_shared<MeshSimplification>(MeshSimplification(objFiles[objIndex], decimations, recalcQsRate));
+    std::chrono::duration<float> duration = std::chrono::high_resolution_clock::now() - m_StartTime;
+    std::cout << "Duration: " << duration.count() << std::endl;
     auto morphFunc = [](Model* model, cg3d::Visitor* visitor) {
         return model->meshIndex;
     };
